@@ -1,13 +1,13 @@
-import { ArrowLeft, Brain, CalendarClock, Copy, MoreHorizontal, Pencil, Star } from 'lucide-react'
+import { ArrowLeft, Brain, CalendarClock, Copy, MoreHorizontal, Pencil, Plus, Star, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EditCardSheet } from '../components/LazyEditCardSheet'
 import { DeckMenu } from '../components/DeckMenu'
 import { Heatmap, useActivity } from '../components/Heatmap'
 import { Empty, ICON, MasteryBar, StatGrid, StatusBadge, useToast } from '../components/ui'
-import { updateCard } from '../lib/db'
+import { addCard, db, deleteCard, isBlankCard, updateCard } from '../lib/db'
 import { useDeck, useKeys } from '../lib/hooks'
-import { masteryPercent } from '../lib/learn'
+import { LEECH_AT, isLeech, masteryPercent } from '../lib/learn'
 import { dueCounts } from '../lib/srs'
 import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card, Status } from '../lib/types'
@@ -20,10 +20,21 @@ export function DeckPage() {
   const toast = useToast()
   const [menu, setMenu] = useState(false)
   const [editing, setEditing] = useState<Card | null>(null)
-  const [filter, setFilter] = useState<Status | 'starred' | null>(null)
+  const [filter, setFilter] = useState<Status | 'starred' | 'leech' | null>(null)
+
+  /** Quick add: a blank card in a sheet, without opening the full editor. Left blank, it's removed on close. */
+  const quickAdd = async () => {
+    if (data) setEditing(await addCard(data.deck.id, { type: 'basic', front: '', back: '' }))
+  }
+  const closeEditor = async () => {
+    const card = editing && (await db.cards.get(editing.id))
+    if (card && !card.deleted_at && isBlankCard(card)) await deleteCard(card.id)
+    setEditing(null)
+  }
 
   useKeys((e) => {
     if (menu || editing || !data) return
+    if (e.key.toLowerCase() === 'a') return void quickAdd()
     const go = { l: 'learn', f: 'flashcards', s: 'spaced', e: 'edit' }[e.key.toLowerCase()]
     if (go && data.cards.length) nav(`/deck/${data.deck.id}/${go}`)
     else if (e.key === 'Escape') nav('/')
@@ -41,12 +52,17 @@ export function DeckPage() {
       </div>
     )
 
-  const { deck, cards, states } = data
+  const { deck, states } = data
+  // Empty cards (an unfinished quick add) are cleaned up when the editor closes; never list them.
+  const cards = data.cards.filter((c) => !isBlankCard(c))
   const statuses = states.map((s) => s.status)
   const due = dueCounts(states, deck.settings.newPerDay, Date.now())
   const statesByCard = new Map<string, Status[]>()
   for (const s of states) statesByCard.set(s.card_id, [...(statesByCard.get(s.card_id) ?? []), s.status])
-  const shown = cards.filter((c) => (!filter ? true : filter === 'starred' ? c.starred : (statesByCard.get(c.id) ?? []).includes(filter)))
+  const leeches = new Set(states.filter(isLeech).map((s) => s.card_id))
+  const shown = cards.filter((c) =>
+    !filter ? true : filter === 'starred' ? c.starred : filter === 'leech' ? leeches.has(c.id) : (statesByCard.get(c.id) ?? []).includes(filter),
+  )
 
   return (
     <div className="page wide">
@@ -99,7 +115,7 @@ export function DeckPage() {
               <div style={{ marginTop: 10 }}>
                 <MasteryBar statuses={statuses} />
               </div>
-              <StatGrid statuses={statuses} active={filter === 'starred' ? null : filter} onPick={(s) => setFilter(s)} />
+              <StatGrid statuses={statuses} active={filter === 'starred' || filter === 'leech' ? null : filter} onPick={(s) => setFilter(s)} />
               <div className="row small muted" style={{ marginTop: 10, gap: 14 }}>
                 <span>
                   <b style={{ color: 'var(--ink)' }}>{due.today}</b> due today
@@ -135,8 +151,18 @@ export function DeckPage() {
           <div className="section">
             <div className="row" style={{ marginBottom: 8 }}>
               <h3 className="section-title grow" style={{ margin: 0 }}>
-                {filter ? `${shown.length} ${filter === 'starred' ? 'starred' : ''} cards` : `${cards.length} cards`}
+                {filter ? `${shown.length} ${filter === 'starred' ? 'starred ' : filter === 'leech' ? 'leech ' : ''}cards` : `${cards.length} cards`}
               </h3>
+              {leeches.size > 0 && (
+                <button
+                  className={`btn btn-ghost small ${filter === 'leech' ? 'on' : ''}`}
+                  onClick={() => setFilter(filter === 'leech' ? null : 'leech')}
+                  aria-pressed={filter === 'leech'}
+                  title={`Missed ${LEECH_AT}+ times: worth rewriting or splitting`}
+                >
+                  <TriangleAlert size={16} /> Leeches {leeches.size}
+                </button>
+              )}
               <button
                 className={`btn btn-ghost small ${filter === 'starred' ? 'on' : ''}`}
                 onClick={() => setFilter(filter === 'starred' ? null : 'starred')}
@@ -149,6 +175,9 @@ export function DeckPage() {
                   Show all
                 </button>
               )}
+              <button className="icon-btn sm bordered" aria-label="Add a card" title="Add a card (A)" onClick={quickAdd}>
+                <Plus size={18} />
+              </button>
             </div>
             <div className="list">
               {shown.map((c) => (
@@ -175,6 +204,7 @@ export function DeckPage() {
                       {(statesByCard.get(c.id) ?? []).map((s, i) => (
                         <StatusBadge key={i} status={s} />
                       ))}
+                      {leeches.has(c.id) && <span className="badge badge-leech">Leech</span>}
                     </div>
                   </button>
                   <button
@@ -201,7 +231,7 @@ export function DeckPage() {
           }}
         />
       )}
-      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditCardSheet card={editing} onClose={closeEditor} />}
       {toast.node}
     </div>
   )

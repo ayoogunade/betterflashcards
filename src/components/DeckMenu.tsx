@@ -1,7 +1,9 @@
-import { Copy, Folder, FolderPlus, Pin, PinOff, RotateCcw, Tag, Trash2 } from 'lucide-react'
+import { Copy, FileDown, Folder, FolderPlus, Pin, PinOff, RotateCcw, Tag, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { copyIntoNewDeck, createFolder, resetProgress, trashDeck, updateDeck } from '../lib/db'
+import { downloadFile } from '../lib/backup'
+import { copyIntoNewDeck, createFolder, deckCards, resetProgress, trashDeck, updateDeck } from '../lib/db'
+import { exportTsv } from '../lib/importParser'
 import { useFolders } from '../lib/hooks'
 import type { Deck } from '../lib/types'
 import { ICON, Sheet } from './ui'
@@ -90,6 +92,15 @@ export function DeckMenu({ deck, onClose, onDone }: { deck: Deck; onClose: () =>
           }}
         >
           <Copy size={ICON} /> Duplicate
+        </button>
+        <button
+          onClick={async () => {
+            const name = (deck.title || 'deck').replace(/[^\w\- ]+/g, '').trim() || 'deck'
+            downloadFile(`${name}.txt`, exportTsv(await deckCards(deck.id)), 'text/tab-separated-values')
+            done('Exported for Anki or Quizlet')
+          }}
+        >
+          <FileDown size={ICON} /> Export for Anki / Quizlet
         </button>
         <button
           onClick={async () => {

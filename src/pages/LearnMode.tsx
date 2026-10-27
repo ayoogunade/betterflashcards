@@ -6,7 +6,7 @@ import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { Empty, MasteryBar, StatGrid, StatusBadge } from '../components/ui'
 import { db, hardDelete, logReview, now, resetProgress } from '../lib/db'
-import { useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, useDeck, useKeys } from '../lib/hooks'
 import {
   answerRound,
   applyRating,
@@ -173,7 +173,7 @@ export function LearnMode() {
 
   useKeys((e) => {
     if (editing || options) return
-    if (e.key === 'Escape') return nav(`/deck/${id}`)
+    if (e.key === 'Escape') return nav(backHref(id))
     if (phase === 'summary') {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault()
@@ -182,11 +182,14 @@ export function LearnMode() {
       return
     }
     if (phase !== 'card') return
-    if (e.key === ' ' || e.key === 'Enter') {
+    if (isFlipKey(e)) {
       e.preventDefault()
-      if (!flipped || e.key === ' ') flip()
-    } else if (e.key === '1' || e.key === 'ArrowRight') void rate(true)
-    else if (e.key === '2' || e.key === 'ArrowLeft') void rate(false)
+      flip()
+    } else if (e.key === '1') void rate(true)
+    else if (e.key === '2') void rate(false)
+    // Arrows answer like a swipe: no need to flip first.
+    else if (e.key === 'ArrowRight') void rate(true, true)
+    else if (e.key === 'ArrowLeft') void rate(false, true)
     else if (e.key.toLowerCase() === 'z') void undoLast()
   })
 
@@ -235,7 +238,7 @@ export function LearnMode() {
               </button>
             )}
           </div>
-          <div className="kbd-hint">Space flip · 1 got it · 2 didn't get it · Z undo</div>
+          <div className="kbd-hint">Space / Enter / ↑↓ flip · → or 1 got it · ← or 2 didn't get it · Z undo</div>
         </>
       )}
 
@@ -255,7 +258,7 @@ export function LearnMode() {
                 Missed only ({round.missed.length})
               </button>
             )}
-            <button className="btn grow" onClick={() => nav(`/deck/${deck.id}`)}>
+            <button className="btn grow" onClick={() => nav(backHref(id))}>
               Done
             </button>
           </div>

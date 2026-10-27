@@ -149,3 +149,23 @@ describe('stats', async () => {
     expect(cells.find((c) => c.key === '2026-10-31')!.future).toBe(true)
   })
 })
+
+describe('deck export', async () => {
+  const { exportTsv } = await import('./importParser')
+  it('writes one tab-separated row per card, keeping line breaks readable', () => {
+    expect(exportTsv([{ type: 'basic', front: '<p>Make</p><p>gdb</p>', back: 'Tools &amp; more' }])).toBe('Make / gdb\tTools & more')
+  })
+  it('turns blanks into ____ with the answers on the back, and skips empty cards', () => {
+    expect(exportTsv([{ type: 'cloze', front: '{{Deadlock}} is waiting {{c2::forever}}', back: '' }, { type: 'basic', front: '', back: '' }])).toBe(
+      '____ is waiting ____\tDeadlock, forever',
+    )
+  })
+})
+
+describe('leeches', async () => {
+  const { isLeech, LEECH_AT } = await import('./learn')
+  it('counts Learn misses plus spaced-review lapses', () => {
+    expect(isLeech({ lapses: LEECH_AT - 1, srs: null })).toBe(false)
+    expect(isLeech({ lapses: LEECH_AT - 2, srs: { lapses: 2 } })).toBe(true)
+  })
+})

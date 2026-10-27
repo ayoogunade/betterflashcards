@@ -10,10 +10,12 @@ export interface Prefs {
   theme: Theme
   cardScale: number
   deckDefaults: DeckSettings
+  /** Study options for folder and all-deck sessions, keyed like `folder:<id>` or `all`. */
+  groupSettings: Record<string, Partial<DeckSettings>>
 }
 
 const KEY = 'bf-prefs'
-const DEFAULTS: Prefs = { theme: 'system', cardScale: 1, deckDefaults: DEFAULT_DECK_SETTINGS }
+const DEFAULTS: Prefs = { theme: 'system', cardScale: 1, deckDefaults: DEFAULT_DECK_SETTINGS, groupSettings: {} }
 
 function load(): Prefs {
   try {

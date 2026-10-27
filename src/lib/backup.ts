@@ -19,13 +19,17 @@ export async function exportAll(): Promise<Backup> {
   return { app: 'betterflashcards', version: 1, exported_at: new Date().toISOString(), tables }
 }
 
-export async function downloadBackup() {
-  const blob = new Blob([JSON.stringify(await exportAll())], { type: 'application/json' })
+/** Save text as a file (a share sheet on iOS, a download on the Mac). */
+export function downloadFile(name: string, text: string, type: string) {
   const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `betterflashcards-${new Date().toISOString().slice(0, 10)}.json`
+  a.href = URL.createObjectURL(new Blob([text], { type }))
+  a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
+}
+
+export async function downloadBackup() {
+  downloadFile(`betterflashcards-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(await exportAll()), 'application/json')
 }
 
 /** Returns how many rows were in the file. */

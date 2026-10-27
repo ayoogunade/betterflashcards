@@ -57,3 +57,36 @@ export function textToHtml(text: string): string {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return `<p>${esc.replace(/\n/g, '<br>')}</p>`
 }
+
+/** One field as plain text for export: line breaks become " / " so each card stays on one row. */
+function fieldText(html: string): string {
+  return html
+    .replace(/<br\s*\/?>|<\/(p|li|div|h\d)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((l) => l.replace(/[\t ]+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' / ')
+}
+
+/**
+ * Tab-separated term/definition rows that Anki ("Import File") and Quizlet ("Import", tab +
+ * new line) both read. Fill-in-the-blank cards become "____" on the front and the answers on the back.
+ */
+export function exportTsv(cards: { type: 'basic' | 'cloze'; front: string; back: string }[]): string {
+  return cards
+    .map((c) => {
+      if (c.type === 'basic') return `${fieldText(c.front)}\t${fieldText(c.back)}`
+      const answers = [...c.front.matchAll(/\{\{(?:c\d+::)?([\s\S]*?)\}\}/g)].map((m) => fieldText(m[1]))
+      const front = fieldText(c.front.replace(/\{\{(?:c\d+::)?[\s\S]*?\}\}/g, '____'))
+      return `${front}\t${[answers.join(', '), fieldText(c.back)].filter(Boolean).join(' / ')}`
+    })
+    .filter((row) => row.replace(/\t/g, '').trim())
+    .join('\n')
+}

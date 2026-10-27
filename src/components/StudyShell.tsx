@@ -2,7 +2,9 @@ import { Settings2, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ICON, NumberInput, Seg, Setting, Sheet, Switch } from './ui'
-import { resetProgress, updateDeck } from '../lib/db'
+import { isGroupKey, resetProgress, updateDeck } from '../lib/db'
+import { backHref } from '../lib/hooks'
+import { getPrefs, setPrefs } from '../lib/prefs'
 import { GRADES, GRADE_LABEL, formatInterval } from '../lib/srs'
 import type { Deck, DeckSettings, Direction } from '../lib/types'
 
@@ -22,7 +24,7 @@ export function StudyShell({
   return (
     <div className="study">
       <div className="study-head">
-        <button className="icon-btn" aria-label="Close" title="Close (Esc)" onClick={() => nav(`/deck/${deck.id}`)}>
+        <button className="icon-btn" aria-label="Close" title="Close (Esc)" onClick={() => nav(backHref(deck.id))}>
           <X size={ICON} />
         </button>
         <div className="title truncate">{deck.title}</div>
@@ -57,7 +59,7 @@ export function StudyOptions({
 }) {
   return (
     <Sheet title="Options" onClose={onClose}>
-      <SettingsFields value={deck.settings} show={show} onChange={(patch) => updateDeck(deck.id, { settings: { ...deck.settings, ...patch } })} />
+      <SettingsFields value={deck.settings} show={show} onChange={(patch) => saveSettings(deck, patch)} />
       <button
         className="btn btn-danger btn-block"
         style={{ marginTop: 16 }}
@@ -76,6 +78,13 @@ export function StudyOptions({
       </button>
     </Sheet>
   )
+}
+
+/** A real deck keeps its options; a folder or all-deck session keeps them in this device's preferences. */
+function saveSettings(deck: Deck, patch: Partial<DeckSettings>) {
+  if (!isGroupKey(deck.id)) return updateDeck(deck.id, { settings: { ...deck.settings, ...patch } })
+  const { groupSettings } = getPrefs()
+  setPrefs({ groupSettings: { ...groupSettings, [deck.id]: { ...groupSettings[deck.id], ...patch } } })
 }
 
 /** The option rows themselves, shared by study Options and the new-deck defaults in Settings. */

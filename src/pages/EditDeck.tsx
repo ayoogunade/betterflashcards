@@ -1,11 +1,11 @@
-import { ArrowDown, ArrowLeftRight, ArrowUp, Check, FileInput, GripVertical, Plus, Repeat, Search, Star, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowLeftRight, ArrowUp, Check, CheckSquare, FileInput, FolderInput, GripVertical, ListChecks, Plus, Repeat, Search, Square, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { CardFields } from '../components/CardFields'
 import { ImportSheet } from '../components/ImportSheet'
-import { ICON, useToast } from '../components/ui'
-import { addCard, db, deleteCard, htmlToText, insertCardAt, now, reorderCards, updateCard, updateDeck } from '../lib/db'
-import { useDeck, useKeys } from '../lib/hooks'
+import { ICON, Sheet, useToast } from '../components/ui'
+import { addCard, alive, db, deleteCard, htmlToText, insertCardAt, moveCards, now, removeBlankCards, reorderCards, updateCard, updateDeck } from '../lib/db'
+import { useDeck, useDecks, useKeys } from '../lib/hooks'
 import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card } from '../lib/types'
 
@@ -20,9 +20,22 @@ export function EditDeck() {
   const [overId, setOverId] = useState<string | null>(null)
   const listEnd = useRef<HTMLDivElement>(null)
   const nav = useNavigate()
+  /** Bulk select: null when off, otherwise the picked card ids. */
+  const [picked, setPicked] = useState<Set<string> | null>(null)
+  const [moving, setMoving] = useState(false)
+  const allDecks = useDecks()
   useKeys((e) => {
-    if (e.key === 'Escape' && !importing && id) nav(`/deck/${id}`)
+    if (e.key !== 'Escape' || importing || moving || !id) return
+    if (picked) setPicked(null)
+    else nav(`/deck/${id}`)
   })
+
+  // Cards left completely empty (an unused + or Add card) are removed when you leave the editor.
+  useEffect(() => {
+    return () => {
+      if (id) void removeBlankCards(id)
+    }
+  }, [id])
 
   // A brand-new empty deck starts with one card open, ready to type.
   const seeded = useRef(false)
@@ -68,6 +81,32 @@ export function EditDeck() {
     toast.show({ msg: 'Swapped all sides' })
   }
 
+  const pick = (cardId: string) =>
+    setPicked((p) => {
+      const next = new Set(p)
+      if (next.has(cardId)) next.delete(cardId)
+      else next.add(cardId)
+      return next
+    })
+  const pickedIds = picked ? cards.filter((c) => picked.has(c.id)).map((c) => c.id) : []
+
+  const bulkDelete = async () => {
+    const t = now()
+    await db.cards.bulkUpdate(pickedIds.map((key) => ({ key, changes: { deleted_at: t, updated_at: t } })))
+    const ids = pickedIds
+    setPicked(null)
+    toast.show({
+      msg: `Deleted ${ids.length} cards`,
+      action: { label: 'Undo', run: () => void db.cards.bulkUpdate(ids.map((key) => ({ key, changes: { deleted_at: null, updated_at: now() } }))) },
+    })
+  }
+  const bulkStar = async () => {
+    const t = now()
+    const star = !cards.filter((c) => picked?.has(c.id)).every((c) => c.starred)
+    await db.cards.bulkUpdate(pickedIds.map((key) => ({ key, changes: { starred: star, updated_at: t } })))
+    toast.show({ msg: `${star ? 'Starred' : 'Unstarred'} ${pickedIds.length} cards` })
+  }
+
   const remove = async (c: Card) => {
     await deleteCard(c.id)
     if (active?.id === c.id) setActive(null)
@@ -81,6 +120,15 @@ export function EditDeck() {
           <Check size={18} /> Done
         </Link>
         <span className="spacer" />
+        <button
+          className={`icon-btn ${picked ? 'on' : ''}`}
+          aria-label={picked ? 'Stop selecting' : 'Select cards'}
+          title="Select several cards"
+          aria-pressed={!!picked}
+          onClick={() => setPicked(picked ? null : new Set())}
+        >
+          <ListChecks size={ICON} />
+        </button>
         <button className="btn" onClick={() => setImporting(true)}>
           <FileInput size={18} /> Import
         </button>
@@ -152,6 +200,16 @@ export function EditDeck() {
               }}
             >
               <div className="head">
+                {picked && (
+                  <button
+                    className={`icon-btn sm ${picked.has(c.id) ? 'on' : ''}`}
+                    aria-label={picked.has(c.id) ? `Deselect card ${index + 1}` : `Select card ${index + 1}`}
+                    aria-pressed={picked.has(c.id)}
+                    onClick={() => pick(c.id)}
+                  >
+                    {picked.has(c.id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                  </button>
+                )}
                 <span
                   className="icon-btn sm"
                   draggable
@@ -223,10 +281,54 @@ export function EditDeck() {
         Tab moves to the next field. Select text and press Cmd+Shift+C to make a blank.
       </p>
 
+      {picked && (
+        <div className="bulk-bar" role="toolbar" aria-label="Selected cards">
+          <button className="icon-btn" aria-label="Stop selecting" onClick={() => setPicked(null)}>
+            <X size={ICON} />
+          </button>
+          <span className="grow small" style={{ fontWeight: 600 }}>
+            {pickedIds.length} selected
+          </span>
+          <button className="btn btn-ghost small" onClick={() => setPicked(pickedIds.length === shown.length ? new Set() : new Set(shown.map((c) => c.id)))}>
+            {pickedIds.length === shown.length ? 'None' : 'All'}
+          </button>
+          <button className="icon-btn" aria-label="Star or unstar selected" title="Star" disabled={!pickedIds.length} onClick={bulkStar}>
+            <Star size={ICON} />
+          </button>
+          <button className="icon-btn" aria-label="Move selected to another deck" title="Move to deck" disabled={!pickedIds.length} onClick={() => setMoving(true)}>
+            <FolderInput size={ICON} />
+          </button>
+          <button className="icon-btn" aria-label="Delete selected" title="Delete" disabled={!pickedIds.length} onClick={bulkDelete} style={{ color: 'var(--danger)' }}>
+            <Trash2 size={ICON} />
+          </button>
+        </div>
+      )}
+      {moving && (
+        <Sheet title={`Move ${pickedIds.length} cards to`} onClose={() => setMoving(false)}>
+          <div className="menu">
+            {(allDecks?.decks ?? [])
+              .filter((d) => alive(d) && d.id !== deck.id)
+              .sort((a, b) => a.title.localeCompare(b.title))
+              .map((d) => (
+                <button
+                  key={d.id}
+                  onClick={async () => {
+                    await moveCards(pickedIds, d.id)
+                    setMoving(false)
+                    setPicked(null)
+                    toast.show({ msg: `Moved ${pickedIds.length} cards to ${d.title}` })
+                  }}
+                >
+                  <FolderInput size={ICON} /> {d.title || 'Untitled deck'}
+                </button>
+              ))}
+          </div>
+        </Sheet>
+      )}
       {importing && (
         <ImportSheet
           deckId={deck.id}
-          hasCards={cards.some((c) => htmlToText(c.front) || htmlToText(c.back))}
+          existing={cards}
           onClose={() => setImporting(false)}
           onDone={(n) => {
             setImporting(false)

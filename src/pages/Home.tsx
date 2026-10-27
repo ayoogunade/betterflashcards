@@ -1,13 +1,15 @@
-import { CalendarClock, ChevronDown, ChevronRight, Folder, FolderPlus, Layers, Merge, Plus, Search, Settings as SettingsIcon, X } from 'lucide-react'
+import { Brain, CalendarClock, ChevronDown, ChevronRight, Folder, FolderPlus, Layers, Merge, Plus, Search, Settings as SettingsIcon, X } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { DeckMenu } from '../components/DeckMenu'
 import { DeckRow } from '../components/DeckRow'
+import { EditCardSheet } from '../components/LazyEditCardSheet'
+import { SyncBadge } from '../components/SyncBadge'
 import { Empty, ICON, Sheet, useToast } from '../components/ui'
 import { alive, copyIntoNewDeck, createDeck, createFolder, deleteFolder, htmlToText } from '../lib/db'
 import { useDecks, useFolders, useKeys } from '../lib/hooks'
 import { dueCounts } from '../lib/srs'
-import type { Deck } from '../lib/types'
+import type { Card, Deck } from '../lib/types'
 
 export function Home() {
   const data = useDecks()
@@ -21,6 +23,7 @@ export function Home() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [folderSheet, setFolderSheet] = useState(false)
   const [folderName, setFolderName] = useState('')
+  const [editing, setEditing] = useState<Card | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const decks = useMemo(
@@ -110,6 +113,7 @@ export function Home() {
             <button className="icon-btn" aria-label="New folder" title="New folder" onClick={() => setFolderSheet(true)}>
               <FolderPlus size={ICON} />
             </button>
+            <SyncBadge />
             <Link className="icon-btn" aria-label="Settings" title="Settings and sync" to="/settings">
               <SettingsIcon size={ICON} />
             </Link>
@@ -139,13 +143,13 @@ export function Home() {
             {results.cardHits.length ? (
               <div className="list">
                 {results.cardHits.map(({ c, front, back }) => (
-                  <Link key={c.id} className="list-item" to={`/deck/${c.deck_id}`}>
-                    <div className="grow">
+                  <button key={c.id} className="list-item" style={{ textAlign: 'left', width: '100%' }} onClick={() => setEditing(c)}>
+                    <div className="grow" style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600 }} className="truncate">{front || '(empty)'}</div>
                       <div className="small muted truncate">{back}</div>
                       <div className="small muted">{decks.find((d) => d.id === c.deck_id)?.title}</div>
                     </div>
-                  </Link>
+                  </button>
                 ))}
               </div>
             ) : (
@@ -166,7 +170,14 @@ export function Home() {
         <>
           {dueDecks.length > 0 && !selecting && (
             <div className="section">
-              <h3 className="section-title">Due today</h3>
+              <div className="row" style={{ marginBottom: 8 }}>
+                <h3 className="section-title grow" style={{ margin: 0 }}>Due today</h3>
+                {dueDecks.length > 1 && (
+                  <Link className="btn btn-primary small" to="/deck/all/spaced">
+                    <CalendarClock size={16} /> Review all {dueDecks.reduce((n, d) => n + dueOf(d), 0)}
+                  </Link>
+                )}
+              </div>
               <div className="list">
                 {dueDecks.map((d) => (
                   <Link key={d.id} className="list-item" to={`/deck/${d.id}/spaced`}>
@@ -206,6 +217,16 @@ export function Home() {
                     <Folder size={16} /> {f.name} · {inFolder.length}
                   </button>
                   <span className="spacer grow" />
+                  {inFolder.length > 0 && !selecting && (
+                    <>
+                      <Link className="icon-btn sm" to={`/deck/folder:${f.id}/learn`} aria-label={`Learn every deck in ${f.name}`} title="Learn this folder">
+                        <Brain size={18} />
+                      </Link>
+                      <Link className="icon-btn sm" to={`/deck/folder:${f.id}/spaced`} aria-label={`Spaced review for ${f.name}`} title="Spaced review for this folder">
+                        <CalendarClock size={18} />
+                      </Link>
+                    </>
+                  )}
                   {inFolder.length === 0 && (
                     <button className="btn btn-ghost small" onClick={() => deleteFolder(f.id)}>
                       Delete folder
@@ -250,6 +271,7 @@ export function Home() {
           </form>
         </Sheet>
       )}
+      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} />}
       {toast.node}
     </div>
   )

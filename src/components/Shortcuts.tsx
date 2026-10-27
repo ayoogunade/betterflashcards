@@ -8,13 +8,14 @@ export const openShortcuts = () => window.dispatchEvent(new Event(EVENT))
 
 const GROUPS: [string, [string, string][]][] = [
   ['Library', [['/', 'Search'], ['N', 'New deck'], ['?', 'This list']]],
-  ['Deck', [['L', 'Learn'], ['F', 'Flashcards'], ['S', 'Spaced review'], ['E', 'Edit deck'], ['Esc', 'Back to library']]],
+  ['Deck', [['L', 'Learn'], ['F', 'Flashcards'], ['S', 'Spaced review'], ['E', 'Edit deck'], ['A', 'Add a card'], ['Esc', 'Back to library']]],
   [
     'Studying',
     [
-      ['Space', 'Flip'],
-      ['1 / 2', "Learn: got it / didn't · Flashcards: know / don't know"],
-      ['1 to 4', 'Spaced: Again / Hard / Good / Easy'],
+      ['Space Enter ↑ ↓', 'Flip back and forth'],
+      ['→ / ←', "Got it / didn't (Learn), know / don't know (Flashcards), Good / Again (Spaced). No need to flip first"],
+      ['1 / 2', "Learn: got it / didn't · Flashcards: know / don't know (after flipping)"],
+      ['1 to 4', 'Spaced: Again / Hard / Good / Easy (after flipping)'],
       ['Z', 'Undo last answer'],
       ['H', 'Hint'],
       ['R', 'Read aloud'],

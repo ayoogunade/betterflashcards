@@ -1,9 +1,14 @@
 import { useMemo, useState } from 'react'
-import { importCards } from '../lib/db'
-import { parseImport, type RowSeparator, type TermSeparator } from '../lib/importParser'
-import { Seg, Sheet } from './ui'
+import { htmlToText, importCards } from '../lib/db'
+import { parseImport, textToHtml, type RowSeparator, type TermSeparator } from '../lib/importParser'
+import type { Card } from '../lib/types'
+import { Seg, Setting, Sheet, Switch } from './ui'
 
-export function ImportSheet({ deckId, hasCards, onClose, onDone }: { deckId: string; hasCards: boolean; onClose: () => void; onDone: (n: number) => void }) {
+const norm = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
+
+export function ImportSheet({ deckId, existing, onClose, onDone }: { deckId: string; existing: Card[]; onClose: () => void; onDone: (n: number) => void }) {
+  const hasCards = existing.some((c) => htmlToText(c.front) || htmlToText(c.back))
+  const [skipDupes, setSkipDupes] = useState(true)
   const [text, setText] = useState('')
   const [termSep, setTermSep] = useState<TermSeparator>('tab')
   const [rowSep, setRowSep] = useState<RowSeparator>('newline')
@@ -17,11 +22,27 @@ export function ImportSheet({ deckId, hasCards, onClose, onDone }: { deckId: str
   )
   const clozes = parsed.filter((p) => p.type === 'cloze').length
 
+  /** Rows whose term is already in the deck, or repeats an earlier row in this paste. */
+  const dupes = useMemo(() => {
+    const seen = new Set(existing.map((c) => norm(htmlToText(c.front))).filter(Boolean))
+    const out = new Set<number>()
+    parsed.forEach((p, i) => {
+      const key = norm(htmlToText(textToHtml(p.front)))
+      if (!key) return
+      if (seen.has(key)) out.add(i)
+      seen.add(key)
+    })
+    return out
+  }, [parsed, existing])
+  const toImport = skipDupes ? parsed.filter((_, i) => !dupes.has(i)) : parsed
+
   const run = async (replace: boolean) => {
-    if (replace && !confirm(`Replace all cards in this deck with ${parsed.length} imported cards? Progress on the old cards is lost.`)) return
+    // Replacing removes the old cards, so only repeats within the paste count as duplicates then.
+    const rows = replace ? parsed.filter((p, i) => !skipDupes || parsed.findIndex((q) => norm(q.front) === norm(p.front)) === i) : toImport
+    if (replace && !confirm(`Replace all cards in this deck with ${rows.length} imported cards? Progress on the old cards is lost.`)) return
     setBusy(true)
-    await importCards(deckId, parsed, replace)
-    onDone(parsed.length)
+    await importCards(deckId, rows, replace)
+    onDone(rows.length)
   }
 
   return (
@@ -71,14 +92,23 @@ export function ImportSheet({ deckId, hasCards, onClose, onDone }: { deckId: str
       />
       <div className="small muted" style={{ margin: '10px 0 6px' }}>
         {parsed.length} cards{clozes ? ` (${clozes} fill in the blank)` : ''}
+        {dupes.size > 0 && <span style={{ color: 'var(--st-learning)' }}> · {dupes.size} already in this deck or repeated</span>}
       </div>
+      {dupes.size > 0 && (
+        <Setting title="Skip duplicates" desc="Matched by term, ignoring case and spacing">
+          <Switch label="Skip duplicates" on={skipDupes} onChange={setSkipDupes} />
+        </Setting>
+      )}
       {parsed.length > 0 && (
         <div className="list" style={{ maxHeight: 220, overflowY: 'auto', boxShadow: 'none', border: '1px solid var(--line)' }}>
           {parsed.slice(0, 100).map((p, i) => (
-            <div key={i} className="list-item small" style={{ alignItems: 'flex-start' }}>
+            <div key={i} className="list-item small" style={{ alignItems: 'flex-start', opacity: skipDupes && dupes.has(i) ? 0.45 : 1 }}>
               <span className="muted" style={{ width: 24 }}>{i + 1}</span>
               <div className="sides grow" style={{ gap: 4 }}>
-                <div style={{ fontWeight: 600, whiteSpace: 'pre-wrap' }}>{p.front.replace(/<br>/g, '\n')}</div>
+                <div style={{ fontWeight: 600, whiteSpace: 'pre-wrap' }}>
+                  {p.front.replace(/<br>/g, '\n')}
+                  {dupes.has(i) && <span className="badge badge-learning" style={{ marginLeft: 6 }}>Duplicate</span>}
+                </div>
                 <div className="muted" style={{ whiteSpace: 'pre-wrap' }}>{p.back.replace(/<br>/g, '\n') || (p.type === 'cloze' ? '' : '(no definition)')}</div>
               </div>
             </div>
@@ -86,8 +116,8 @@ export function ImportSheet({ deckId, hasCards, onClose, onDone }: { deckId: str
         </div>
       )}
       <div className="row" style={{ marginTop: 14 }}>
-        <button className="btn btn-primary grow" disabled={!parsed.length || busy} onClick={() => run(false)}>
-          {hasCards ? 'Add to bottom' : `Import ${parsed.length} cards`}
+        <button className="btn btn-primary grow" disabled={!toImport.length || busy} onClick={() => run(false)}>
+          {hasCards ? `Add ${toImport.length} to bottom` : `Import ${toImport.length} cards`}
         </button>
         {hasCards && (
           <button className="btn btn-danger" disabled={!parsed.length || busy} onClick={() => run(true)}>

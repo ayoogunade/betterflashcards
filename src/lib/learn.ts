@@ -115,6 +115,10 @@ export function statusCounts(statuses: Status[]): Record<Status, number> {
   return c
 }
 
+/** Cards missed this many times (Learn misses plus spaced-review lapses) are leeches: worth rewriting. */
+export const LEECH_AT = 6
+export const isLeech = (s: { lapses: number; srs?: { lapses: number } | null }) => s.lapses + (s.srs?.lapses ?? 0) >= LEECH_AT
+
 export const STATUS_LABEL: Record<Status, string> = {
   new: 'New',
   learning: 'Still learning',

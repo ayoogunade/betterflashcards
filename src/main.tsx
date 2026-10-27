@@ -1,7 +1,7 @@
 import 'katex/dist/katex.min.css'
-import { StrictMode, Suspense, lazy } from 'react'
+import { StrictMode, Suspense, lazy, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { BrowserRouter, Route, Routes } from 'react-router-dom'
+import { BrowserRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import { purgeTrash, requestPersistence } from './lib/db'
 import { applyPrefs } from './lib/prefs'
@@ -19,10 +19,16 @@ import './styles.css'
 
 const EditDeck = lazy(() => import('./pages/EditDeck').then((m) => ({ default: m.EditDeck })))
 
-// autoUpdate reloads once a new version is installed. iOS keeps a Home Screen app alive for days
-// without a fresh page load, so also check for a new version on launch, on resume and hourly.
-registerSW({
+// A new version waits until you're not studying or editing, so an update never resets a round or
+// drops unsaved typing. iOS keeps a Home Screen app alive for days, so also check on resume and hourly.
+let updateReady = false
+const BUSY = /\/(learn|spaced|flashcards|edit)$/
+const updateSW = registerSW({
   immediate: true,
+  onNeedRefresh() {
+    updateReady = true
+    applyUpdateIfIdle()
+  },
   onRegisteredSW(_url, reg) {
     if (!reg) return
     const check = () => navigator.onLine && void reg.update()
@@ -30,6 +36,16 @@ registerSW({
     setInterval(check, 60 * 60_000)
   },
 })
+function applyUpdateIfIdle() {
+  if (updateReady && !BUSY.test(location.pathname)) void updateSW(true)
+}
+
+/** Re-checks for a waiting update on every navigation (e.g. closing a study screen). */
+function UpdateOnNavigate() {
+  const { pathname } = useLocation()
+  useEffect(applyUpdateIfIdle, [pathname])
+  return null
+}
 void requestPersistence()
 void purgeTrash()
 startSync()
@@ -58,6 +74,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="*" element={<Home />} />
       </Routes>
       <Shortcuts />
+      <UpdateOnNavigate />
     </BrowserRouter>
   </StrictMode>,
 )

@@ -6,7 +6,7 @@ import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { Empty } from '../components/ui'
 import { db, hardDelete, logReview, now } from '../lib/db'
-import { useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, useDeck, useKeys } from '../lib/hooks'
 import { buildItem, speak } from '../lib/render'
 import { GRADES, GRADE_LABEL, formatInterval, isDue, newLeftToday, nextDue, preview, schedule, type Grade } from '../lib/srs'
 import type { Card, CardState, Rating } from '../lib/types'
@@ -30,6 +30,8 @@ export function SpacedMode() {
   const shownAt = useRef(Date.now())
   const busy = useRef(false)
   const settings = data?.deck.settings
+  /** "Review all due" from the library: due cards only; new cards are introduced per deck or folder. */
+  const dueOnly = id === 'all'
 
   // Learning cards come due within minutes, so re-check the queue while waiting on the done screen.
   useEffect(() => {
@@ -51,7 +53,7 @@ export function SpacedMode() {
     if (!settings) return
     const states = override ? eligible.map((s) => (s.key === override.key ? override : s)) : eligible
     const t = Date.now()
-    const newLeft = newLeftToday(states, settings.newPerDay, t) + extraNew
+    const newLeft = dueOnly ? 0 : newLeftToday(states, settings.newPerDay, t) + extraNew
     const next = nextDue(
       states.map((s) => ({ key: s.key, srs: s.srs, order: (orderOf.get(s.card_id) ?? 0) * 100 + s.sub_index })),
       t,
@@ -134,12 +136,15 @@ export function SpacedMode() {
 
   useKeys((e) => {
     if (editing || options) return
-    if (e.key === 'Escape') return nav(`/deck/${id}`)
+    if (e.key === 'Escape') return nav(backHref(id))
     if (done) return
-    if (e.key === ' ' || e.key === 'Enter') {
+    if (isFlipKey(e)) {
       e.preventDefault()
-      if (!flipped || e.key === ' ') flip()
+      flip()
     } else if (['1', '2', '3', '4'].includes(e.key)) void rate(Number(e.key) as Grade)
+    // Arrows answer like a swipe: right Good, left Again, no need to flip first.
+    else if (e.key === 'ArrowRight') void rate(3, true)
+    else if (e.key === 'ArrowLeft') void rate(1, true)
     else if (e.key.toLowerCase() === 'z') void undoLast()
   })
 
@@ -149,7 +154,7 @@ export function SpacedMode() {
 
   const t = Date.now()
   const dueNow = eligible.filter((s) => isDue(s, t)).length
-  const newLeft = Math.min(eligible.filter((s) => !s.srs).length, newLeftToday(eligible, settings.newPerDay, t) + extraNew)
+  const newLeft = dueOnly ? 0 : Math.min(eligible.filter((s) => !s.srs).length, newLeftToday(eligible, settings.newPerDay, t) + extraNew)
   const remaining = dueNow + newLeft
   const nextAt = eligible.reduce((m, s) => (s.srs ? Math.min(m, Date.parse(s.srs.due)) : m), Infinity)
   const unseen = eligible.filter((s) => !s.srs).length
@@ -177,12 +182,12 @@ export function SpacedMode() {
             {Number.isFinite(nextAt) ? `Next review in ${formatInterval(Math.max(0, nextAt - t))}.` : 'Nothing scheduled yet.'}
           </p>
           <div className="row wrap" style={{ justifyContent: 'center', gap: 10, marginTop: 12 }}>
-            {unseen > 0 && (
+            {unseen > 0 && !dueOnly && (
               <button className="btn" onClick={() => setExtraNew((n) => n + Math.max(1, settings.newPerDay))}>
                 <Plus size={18} /> {Math.min(unseen, Math.max(1, settings.newPerDay))} more new cards
               </button>
             )}
-            <button className="btn btn-primary" onClick={() => nav(`/deck/${deck.id}`)} autoFocus>
+            <button className="btn btn-primary" onClick={() => nav(backHref(id))} autoFocus>
               Done
             </button>
             {undo.length > 0 && (
@@ -226,7 +231,7 @@ export function SpacedMode() {
               </button>
             )}
           </div>
-          <div className="kbd-hint">Space flip · 1 again · 2 hard · 3 good · 4 easy · Z undo</div>
+          <div className="kbd-hint">Space / Enter / ↑↓ flip · 1–4 or ← again, → good · Z undo</div>
         </>
       )}
 

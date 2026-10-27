@@ -6,7 +6,7 @@ import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { Empty } from '../components/ui'
 import { db, hardDelete, logReview, now } from '../lib/db'
-import { useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, useDeck, useKeys } from '../lib/hooks'
 import { shuffled } from '../lib/learn'
 import { buildItem, speak } from '../lib/render'
 import type { Card, CardState } from '../lib/types'
@@ -124,12 +124,12 @@ export function FlashcardsMode() {
 
   useKeys((e) => {
     if (editing || options) return
-    if (e.key === 'Escape') return nav(`/deck/${id}`)
-    if (e.key === ' ' || e.key === 'Enter') {
+    if (e.key === 'Escape') return nav(backHref(id))
+    if (isFlipKey(e)) {
       e.preventDefault()
       flip()
-    } else if (settings?.sortPiles && flipped && (e.key === '1' || e.key === 'ArrowRight')) void sortCard(true)
-    else if (settings?.sortPiles && flipped && (e.key === '2' || e.key === 'ArrowLeft')) void sortCard(false)
+    } else if (settings?.sortPiles && ((flipped && e.key === '1') || e.key === 'ArrowRight')) void sortCard(true)
+    else if (settings?.sortPiles && ((flipped && e.key === '2') || e.key === 'ArrowLeft')) void sortCard(false)
     else if (!settings?.sortPiles && e.key === 'ArrowRight') go(1)
     else if (!settings?.sortPiles && e.key === 'ArrowLeft') go(-1)
     else if (e.key.toLowerCase() === 'z') void undoLast()
@@ -229,7 +229,7 @@ export function FlashcardsMode() {
               </button>
             )}
           </div>
-          <div className="kbd-hint">{sorting ? 'Space flip · 1 know · 2 don\'t know · Z undo' : 'Space flip · arrows move'}</div>
+          <div className="kbd-hint">{sorting ? 'Space / Enter / ↑↓ flip · → know · ← don\'t know · Z undo' : 'Space / Enter / ↑↓ flip · ←→ move'}</div>
         </>
       )}
 

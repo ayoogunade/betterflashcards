@@ -328,6 +328,7 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
 .badge-new { color: var(--st-new); background: color-mix(in srgb, var(--st-new) 14%, transparent); }
 .badge-learning { color: var(--st-learning); background: color-mix(in srgb, var(--st-learning) 14%, transparent); }
 .badge-almost { color: var(--st-almost); background: color-mix(in srgb, var(--st-almost) 14%, transparent); }
+.badge-leech { color: var(--danger); background: var(--danger-soft); }
 .badge-mastered { color: var(--st-mastered); background: color-mix(in srgb, var(--st-mastered) 14%, transparent); }
 
 .mastery-bar {
@@ -546,6 +547,8 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
 .face-body:not(.long) { text-align: center; }
 .face-body.long { font-size: calc(clamp(17px, 2.6vw, 21px) * var(--card-scale, 1)); justify-content: flex-start; }
 .face-prompt-mini {
+  user-select: text;
+  -webkit-user-select: text;
   font-size: 15px;
   color: var(--ink-2);
   border-bottom: 1px solid var(--line);
@@ -554,7 +557,12 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
   overflow-y: auto;
 }
 .face-hint { font-size: 15px; color: var(--ink-2); font-family: var(--mono); letter-spacing: 0.05em; }
-.tap-hint { text-align: center; font-size: 13px; color: var(--ink-3); margin-top: auto; }
+.face-top .icon-btn.sm { width: 40px; height: 40px; }
+.face-top .icon-btn.sm svg { width: 20px; height: 20px; }
+/* Status badge bottom-left; "Tap to flip" stays centred on the card. */
+.face-foot { position: relative; display: flex; align-items: center; justify-content: center; min-height: 26px; margin-top: auto; }
+.face-foot .badge { position: absolute; left: 0; }
+.tap-hint { font-size: 13px; color: var(--ink-3); }
 
 .grade { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
 .grade button {
@@ -702,3 +710,20 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
   color: var(--ink-2);
   white-space: nowrap;
 }
+
+/* Bulk-select actions, pinned to the bottom of the editor. */
+.bulk-bar {
+  position: sticky;
+  bottom: calc(env(safe-area-inset-bottom) + 10px);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 6px 8px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.15);
+  z-index: 5;
+}
+.bulk-bar .icon-btn:disabled { opacity: 0.4; }

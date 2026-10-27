@@ -87,6 +87,22 @@ export function htmlToText(html: string): string {
     .trim()
 }
 
+/** A card with no text and no image on either side (e.g. an inserted card left empty). Never studied. */
+export function isBlankCard(card: Pick<Card, 'front' | 'back'>): boolean {
+  const empty = (html: string) => !htmlToText(html) && !/<img/i.test(html)
+  return empty(card.front) && empty(card.back)
+}
+
+/** Study screens can run on one deck, a folder (`folder:<id>`), or every deck (`all`). */
+export const isGroupKey = (key?: string) => key === 'all' || !!key?.startsWith('folder:')
+
+/** Live deck ids behind a study key. */
+export async function decksInGroup(key: string): Promise<string[]> {
+  if (!isGroupKey(key)) return [key]
+  const decks = (await db.decks.toArray()).filter(alive)
+  return (key === 'all' ? decks : decks.filter((d) => d.folder_id === key.slice('folder:'.length))).map((d) => d.id)
+}
+
 // ---- Decks ----
 
 export async function createDeck(title = 'Untitled deck', folder_id: string | null = null): Promise<Deck> {
@@ -233,6 +249,32 @@ export async function insertCardAt(deckId: string, index: number): Promise<Card>
   return card
 }
 
+/** Move cards (with their study progress) to the end of another deck. */
+export async function moveCards(ids: string[], toDeckId: string) {
+  const t = now()
+  const existing = await deckCards(toDeckId)
+  let order = existing.length ? existing[existing.length - 1].sort_order + 1 : 0
+  const from = new Set<string>()
+  await db.transaction('rw', db.cards, db.cardStates, db.decks, async () => {
+    for (const id of ids) {
+      const card = await db.cards.get(id)
+      if (!card) continue
+      from.add(card.deck_id)
+      await db.cards.update(id, { deck_id: toDeckId, sort_order: order++, updated_at: t })
+      await db.cardStates.where('card_id').equals(id).modify({ deck_id: toDeckId, updated_at: t })
+    }
+    for (const d of [...from, toDeckId]) await touchDeck(d)
+  })
+}
+
+/** Soft-delete cards left completely empty, e.g. when leaving the editor. */
+export async function removeBlankCards(deckId: string) {
+  const t = now()
+  const blank = (await deckCards(deckId)).filter(isBlankCard)
+  if (blank.length) await db.cards.bulkUpdate(blank.map((c) => ({ key: c.id, changes: { deleted_at: t, updated_at: t } })))
+  return blank.length
+}
+
 /** Rewrite sort_order to match the given id order. */
 export async function reorderCards(ids: string[]) {
   const t = now()
@@ -268,10 +310,10 @@ export async function syncStates(card: Card) {
   }
 }
 
-/** 'study' resets Learn statuses and Flashcards piles; 'schedule' resets spaced repetition. */
+/** 'study' resets Learn statuses and Flashcards piles; 'schedule' resets spaced repetition. Accepts a group key too. */
 export async function resetProgress(deckId: string, what: 'study' | 'schedule' = 'study') {
   const t = now()
-  const states = await db.cardStates.where('deck_id').equals(deckId).toArray()
+  const states = await db.cardStates.where('deck_id').anyOf(await decksInGroup(deckId)).toArray()
   const patch = what === 'study' ? { status: 'new' as const, streak: 0, know_pile: null } : { srs: null }
   await db.cardStates.bulkPut(states.map((s) => ({ ...s, ...patch, updated_at: t })))
 }
