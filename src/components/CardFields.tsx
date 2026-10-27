@@ -1,7 +1,9 @@
-import { ArrowLeftRight } from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { hasCloze } from '../lib/cloze'
-import { updateCard } from '../lib/db'
+import { db, deckCards, deleteCard, insertCardAt, isBlankCard, updateCard } from '../lib/db'
+import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card, CardType } from '../lib/types'
 import { RichEditor } from './RichEditor'
 import { Seg, Sheet } from './ui'
@@ -128,11 +130,117 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
   )
 }
 
-export function EditCardSheet({ card, onClose }: { card: Card; onClose: () => void }) {
+/** Read-only view of a card's sides; tapping a side opens it for editing. */
+export function CardPreview({ card, onOpen }: { card: Card; onOpen: (field: 'front' | 'back') => void }) {
+  if (card.type === 'cloze')
+    return (
+      <div
+        className="side-box rich"
+        onClick={() => onOpen('front')}
+        dangerouslySetInnerHTML={{ __html: renderMath(highlightClozeSource(card.front)) || '<span class="muted">Fill in the blank</span>' }}
+      />
+    )
   return (
-    <Sheet title="Edit card" onClose={onClose}>
-      <CardFields card={card} />
-      <button className="btn btn-primary btn-block" style={{ marginTop: 16 }} onClick={onClose}>
+    <div className="sides">
+      <div>
+        <div className="side-label">Term</div>
+        <div
+          className={`side-box rich ${card.front ? '' : 'placeholder'}`}
+          onClick={() => onOpen('front')}
+          dangerouslySetInnerHTML={{ __html: renderMath(card.front) || 'Term' }}
+        />
+      </div>
+      <div>
+        <div className="side-label">Definition</div>
+        <div
+          className={`side-box rich ${card.back ? '' : 'placeholder'}`}
+          onClick={() => onOpen('back')}
+          dangerouslySetInnerHTML={{ __html: renderMath(card.back) || 'Definition' }}
+        />
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The "Edit card" sheet (deck page, quick add, search, study screens). "Add card" adds more cards right
+ * after this one in the same sheet; the open card is editable and the others show as previews to tap.
+ * New cards left empty are removed when the sheet closes.
+ */
+export function EditCardSheet({ card, onClose }: { card: Card; onClose: () => void }) {
+  const [ids, setIds] = useState([card.id])
+  const [active, setActive] = useState<{ id: string; field: 'front' | 'back' }>({ id: card.id, field: 'front' })
+  const created = useRef<string[]>([])
+  const live = useLiveQuery(() => db.cards.bulkGet(ids), [ids])
+  const cards = ids.map((id, i) => live?.[i] ?? (id === card.id ? card : undefined)).filter((c): c is Card => !!c && !c.deleted_at)
+
+  const add = async () => {
+    // Insert after the last card in this sheet, keeping the new cards together in the deck.
+    const order = (await deckCards(card.deck_id)).map((c) => c.id)
+    const after = Math.max(...ids.map((id) => order.indexOf(id)))
+    const c = await insertCardAt(card.deck_id, after + 1)
+    created.current.push(c.id)
+    setIds((x) => [...x, c.id])
+    setActive({ id: c.id, field: 'front' })
+  }
+
+  const remove = async (id: string) => {
+    await deleteCard(id)
+    setIds((x) => x.filter((y) => y !== id))
+    if (active.id === id) setActive({ id: card.id, field: 'front' })
+  }
+
+  const close = async () => {
+    // Let the open card's debounced save land before checking for empty new cards.
+    setActive({ id: '', field: 'front' })
+    await new Promise((r) => setTimeout(r, 100))
+    for (const id of created.current) {
+      const c = await db.cards.get(id)
+      if (c && !c.deleted_at && isBlankCard(c)) await deleteCard(id)
+    }
+    onClose()
+  }
+
+  return (
+    <Sheet title={cards.length > 1 ? `Edit ${cards.length} cards` : 'Edit card'} onClose={close}>
+      {cards.map((c, i) => (
+        <div key={c.id} className={`sheet-card ${active.id === c.id ? 'active' : ''}`}>
+          {cards.length > 1 && (
+            <div className="row" style={{ marginBottom: 4 }}>
+              <span className="side-label grow" style={{ margin: 0 }}>
+                {i === 0 ? 'Card' : `New card ${i}`}
+              </span>
+              {created.current.includes(c.id) && (
+                <button className="icon-btn sm" aria-label={`Remove new card ${i}`} onClick={() => remove(c.id)}>
+                  <Trash2 size={16} />
+                </button>
+              )}
+            </div>
+          )}
+          {active.id === c.id ? (
+            <CardFields
+              key={c.id}
+              card={c}
+              focus={active.field}
+              onTabOut={() => {
+                const next = cards[i + 1]
+                if (next) setActive({ id: next.id, field: 'front' })
+                else void add()
+              }}
+              onShiftTabOut={() => {
+                const prev = cards[i - 1]
+                if (prev) setActive({ id: prev.id, field: 'back' })
+              }}
+            />
+          ) : (
+            <CardPreview card={c} onOpen={(field) => setActive({ id: c.id, field })} />
+          )}
+        </div>
+      ))}
+      <button className="btn btn-block" style={{ marginTop: 12, borderStyle: 'dashed' }} onClick={() => void add()}>
+        <Plus size={18} /> Add card
+      </button>
+      <button className="btn btn-primary btn-block" style={{ marginTop: 10 }} onClick={() => void close()}>
         Done
       </button>
     </Sheet>

@@ -727,3 +727,8 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
   z-index: 5;
 }
 .bulk-bar .icon-btn:disabled { opacity: 0.4; }
+
+/* Cards stacked in the Edit card sheet: the open one is outlined, like the deck editor. */
+.sheet-card { padding: 10px; margin: 0 -10px 8px; border-radius: var(--radius); border: 2px solid transparent; }
+.sheet-card.active { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.sheet-card + .sheet-card { margin-top: 4px; }

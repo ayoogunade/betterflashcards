@@ -1,12 +1,11 @@
 import { ArrowDown, ArrowLeftRight, ArrowUp, Check, CheckSquare, FileInput, FolderInput, GripVertical, ListChecks, Plus, Repeat, Search, Square, Star, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { CardFields } from '../components/CardFields'
+import { CardFields, CardPreview } from '../components/CardFields'
 import { ImportSheet } from '../components/ImportSheet'
 import { ICON, Sheet, useToast } from '../components/ui'
 import { addCard, alive, db, deleteCard, htmlToText, insertCardAt, moveCards, now, removeBlankCards, reorderCards, updateCard, updateDeck } from '../lib/db'
 import { useDeck, useDecks, useKeys } from '../lib/hooks'
-import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card } from '../lib/types'
 
 export function EditDeck() {
@@ -338,37 +337,6 @@ export function EditDeck() {
         />
       )}
       {toast.node}
-    </div>
-  )
-}
-
-function CardPreview({ card, onOpen }: { card: Card; onOpen: (field: 'front' | 'back') => void }) {
-  if (card.type === 'cloze')
-    return (
-      <div
-        className="side-box rich"
-        onClick={() => onOpen('front')}
-        dangerouslySetInnerHTML={{ __html: renderMath(highlightClozeSource(card.front)) || '<span class="muted">Fill in the blank</span>' }}
-      />
-    )
-  return (
-    <div className="sides">
-      <div>
-        <div className="side-label">Term</div>
-        <div
-          className={`side-box rich ${card.front ? '' : 'placeholder'}`}
-          onClick={() => onOpen('front')}
-          dangerouslySetInnerHTML={{ __html: renderMath(card.front) || 'Term' }}
-        />
-      </div>
-      <div>
-        <div className="side-label">Definition</div>
-        <div
-          className={`side-box rich ${card.back ? '' : 'placeholder'}`}
-          onClick={() => onOpen('back')}
-          dangerouslySetInnerHTML={{ __html: renderMath(card.back) || 'Definition' }}
-        />
-      </div>
     </div>
   )
 }
