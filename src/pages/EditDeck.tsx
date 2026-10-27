@@ -229,7 +229,8 @@ export function EditDeck() {
                 <button className="icon-btn sm" aria-label="Move down" disabled={index === cards.length - 1} onClick={() => move(c, 1)}>
                   <ArrowDown size={16} />
                 </button>
-                {c.type === 'basic' && (
+                {/* The open card has its own Swap button next to Basic / Fill in the blank. */}
+                {c.type === 'basic' && !isActive && (
                   <button
                     className="icon-btn sm"
                     aria-label="Swap term and definition"

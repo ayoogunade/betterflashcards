@@ -1,3 +1,4 @@
+import { ArrowLeftRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { hasCloze } from '../lib/cloze'
 import { updateCard } from '../lib/db'
@@ -36,7 +37,29 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
   const [type, setType] = useState<CardType>(card.type)
   const [field, setField] = useState<'front' | 'back'>(focus)
 
+  // What the editors show. `latest` tracks typing without re-rendering; `ver` remounts both editors
+  // after a swap, so even the one being typed in shows its new text.
+  const latest = useRef({ front: card.front, back: card.back })
+  const [sides, setSides] = useState(latest.current)
+  const [ver, setVer] = useState(0)
+  useEffect(() => {
+    // An outside change (another device, the editor's header buttons), not our own save echoing back.
+    if (card.front !== latest.current.front || card.back !== latest.current.back) {
+      latest.current = { front: card.front, back: card.back }
+      setSides(latest.current)
+    }
+  }, [card.front, card.back])
+
+  const swap = () => {
+    const next = { front: latest.current.back, back: latest.current.front }
+    latest.current = next
+    setSides(next)
+    setVer((v) => v + 1)
+    save(next)
+  }
+
   const setFrontAndType = (html: string) => {
+    latest.current = { ...latest.current, front: html }
     // Typing {{...}} into a basic card turns it into a cloze card automatically.
     if (type === 'basic' && hasCloze(html)) {
       setType('cloze')
@@ -58,16 +81,21 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
             save({ type: t })
           }}
         />
+        {type === 'basic' && (
+          <button type="button" className="btn btn-ghost small" style={{ marginLeft: 'auto' }} onClick={swap} aria-label="Swap term and definition" title="Swap term and definition">
+            <ArrowLeftRight size={16} /> Swap
+          </button>
+        )}
       </div>
       <div className="sides">
         <div onFocusCapture={() => setField('front')}>
           <div className="side-label">{type === 'cloze' ? 'Text with {{blanks}}' : 'Term'}</div>
           <div className="side-box">
             <RichEditor
-              key={`${card.id}-front`}
-              value={card.front}
+              key={`${card.id}-front-${ver}`}
+              value={sides.front}
               placeholder={type === 'cloze' ? '{{Donald Trump}} was the 45th president' : 'Term'}
-              autofocus={focus === 'front'}
+              autofocus={ver ? field === 'front' : focus === 'front'}
               focused={field === 'front'}
               toolbar={field === 'front'}
               onChange={setFrontAndType}
@@ -80,13 +108,16 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
           <div className="side-label">{type === 'cloze' ? 'Extra info (optional)' : 'Definition'}</div>
           <div className="side-box">
             <RichEditor
-              key={`${card.id}-back`}
-              value={card.back}
+              key={`${card.id}-back-${ver}`}
+              value={sides.back}
               placeholder={type === 'cloze' ? 'Shown after flipping' : 'Definition'}
-              autofocus={focus === 'back'}
+              autofocus={ver ? field === 'back' : focus === 'back'}
               focused={field === 'back'}
               toolbar={field === 'back'}
-              onChange={(html) => save({ back: html })}
+              onChange={(html) => {
+                latest.current = { ...latest.current, back: html }
+                save({ back: html })
+              }}
               onTab={onTabOut}
               onShiftTab={() => setField('front')}
             />
