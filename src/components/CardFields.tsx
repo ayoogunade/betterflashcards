@@ -1,6 +1,6 @@
 import type { Editor } from '@tiptap/react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeftRight, Check, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { hasCloze } from '../lib/cloze'
 import { db, deckCards, deleteCard, insertCardAt, isBlankCard, updateCard } from '../lib/db'
@@ -9,22 +9,25 @@ import type { Card, CardType } from '../lib/types'
 import { EditorToolbar, RichEditor } from './RichEditor'
 import { Seg, Sheet } from './ui'
 
-/** Debounced card save; flushes on unmount so nothing typed is lost. */
+/** Debounced card save; flushes on unmount so nothing typed is lost. `saved` turns true once a save lands. */
 export function useCardSaver(cardId: string) {
   const pending = useRef<Partial<Card>>({})
   const timer = useRef<ReturnType<typeof setTimeout>>()
+  const [saved, setSaved] = useState(false)
   const flush = () => {
     clearTimeout(timer.current)
     const patch = pending.current
     pending.current = {}
-    if (Object.keys(patch).length) void updateCard(cardId, patch)
+    if (Object.keys(patch).length) void updateCard(cardId, patch).then(() => setSaved(true))
   }
   useEffect(() => flush, [cardId]) // eslint-disable-line react-hooks/exhaustive-deps
-  return (patch: Partial<Card>) => {
+  const save = (patch: Partial<Card>) => {
     pending.current = { ...pending.current, ...patch }
+    setSaved(false)
     clearTimeout(timer.current)
     timer.current = setTimeout(flush, 350)
   }
+  return { save, saved }
 }
 
 interface FieldsProps {
@@ -36,7 +39,7 @@ interface FieldsProps {
 
 /** Type switch + the two rich-text sides of one card. Used by the deck editor and the in-study edit sheet. */
 export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: FieldsProps) {
-  const save = useCardSaver(card.id)
+  const { save, saved } = useCardSaver(card.id)
   const [type, setType] = useState<CardType>(card.type)
   const [field, setField] = useState<'front' | 'back'>(focus)
 
@@ -63,6 +66,12 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
     save(next)
   }
 
+  const toggleType = () => {
+    const t: CardType = type === 'basic' ? 'cloze' : 'basic'
+    setType(t)
+    save({ type: t })
+  }
+
   const setFrontAndType = (html: string) => {
     latest.current = { ...latest.current, front: html }
     // Typing {{...}} into a basic card turns it into a cloze card automatically.
@@ -81,13 +90,17 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
             { value: 'basic', label: 'Basic' },
             { value: 'cloze', label: 'Fill in the blank' },
           ]}
-          onChange={(t) => {
-            setType(t)
-            save({ type: t })
-          }}
+          onChange={(t) => t !== type && toggleType()}
         />
+        <span className={`saved-tick ${saved ? 'on' : ''}`} role="status">
+          {saved && (
+            <>
+              <Check size={14} /> Saved
+            </>
+          )}
+        </span>
         {type === 'basic' && (
-          <button type="button" className="btn btn-ghost small" style={{ marginLeft: 'auto' }} onClick={swap} aria-label="Swap term and definition" title="Swap term and definition">
+          <button type="button" className="btn btn-ghost small" onClick={swap} aria-label="Swap term and definition (Alt+S)" title="Swap term and definition (Alt+S)">
             <ArrowLeftRight size={16} /> Swap
           </button>
         )}
@@ -107,6 +120,8 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
               onChange={setFrontAndType}
               onTab={() => setField('back')}
               onShiftTab={onShiftTabOut}
+              onSwap={type === 'basic' ? swap : undefined}
+              onToggleType={toggleType}
             />
           </div>
         </div>
@@ -126,6 +141,8 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
               }}
               onTab={onTabOut}
               onShiftTab={() => setField('front')}
+              onSwap={type === 'basic' ? swap : undefined}
+              onToggleType={toggleType}
             />
           </div>
         </div>

@@ -6,6 +6,7 @@ import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import Underline from '@tiptap/extension-underline'
 import { EditorContent, useEditor, type Editor } from '@tiptap/react'
+import type { EditorView } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import {
   Bold,
@@ -40,6 +41,17 @@ export function makeBlank(editor: Editor) {
   else editor.chain().focus().insertContent('{{}}').setTextSelection(from + 2).run()
 }
 
+const imageFiles = (list?: FileList | null) => [...(list ?? [])].filter((f) => f.type.startsWith('image/'))
+
+/** Insert pasted or dropped image files at `pos` (default: the cursor). */
+async function insertImages(view: EditorView, files: File[], pos?: number) {
+  for (const f of files) {
+    const node = view.state.schema.nodes.image.create({ src: await fileToDataUrl(f) })
+    const tr = pos == null ? view.state.tr.replaceSelectionWith(node) : view.state.tr.insert(pos, node)
+    view.dispatch(tr)
+  }
+}
+
 /** Downscale an image file to a JPEG data URL so cards stay small enough to sync. */
 export async function fileToDataUrl(file: File, max = 1200): Promise<string> {
   const url = URL.createObjectURL(file)
@@ -69,16 +81,20 @@ interface Props {
   /** Tab outside a list moves to the next field; return value unused. */
   onTab?: () => void
   onShiftTab?: () => void
+  /** Alt+S swaps the card's sides. */
+  onSwap?: () => void
+  /** Alt+T switches between Basic and Fill in the blank. */
+  onToggleType?: () => void
   /** Hands the editor up so one shared toolbar (EditorToolbar) can drive whichever side is active. */
   onEditor?: (editor: Editor | null) => void
   /** When this turns true the editor takes focus (used for Tab between sides). */
   focused?: boolean
 }
 
-export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onShiftTab, onEditor, focused }: Props) {
+export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onShiftTab, onSwap, onToggleType, onEditor, focused }: Props) {
   // Keep latest callbacks in refs so the editor (created once) always calls the current ones.
-  const cb = useRef({ onChange, onTab, onShiftTab, placeholder })
-  cb.current = { onChange, onTab, onShiftTab, placeholder }
+  const cb = useRef({ onChange, onTab, onShiftTab, onSwap, onToggleType, placeholder })
+  cb.current = { onChange, onTab, onShiftTab, onSwap, onToggleType, placeholder }
 
   const editor = useEditor({
     extensions: [
@@ -97,6 +113,16 @@ export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onS
               makeBlank(this.editor as Editor)
               return true
             },
+            'Alt-s': () => {
+              if (!cb.current.onSwap) return false
+              cb.current.onSwap()
+              return true
+            },
+            'Alt-t': () => {
+              if (!cb.current.onToggleType) return false
+              cb.current.onToggleType()
+              return true
+            },
             Tab: () => {
               if (this.editor.isActive('listItem') || !cb.current.onTab) return false
               cb.current.onTab()
@@ -113,6 +139,21 @@ export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onS
     ],
     content: value,
     autofocus: autofocus ? 'end' : false,
+    editorProps: {
+      // Screenshots pasted or dragged in become images, like the toolbar's image button.
+      handlePaste: (view, e) => {
+        const files = imageFiles(e.clipboardData?.files)
+        if (!files.length) return false
+        void insertImages(view, files)
+        return true
+      },
+      handleDrop: (view, e, _slice, moved) => {
+        const files = imageFiles(e.dataTransfer?.files)
+        if (moved || !files.length) return false
+        void insertImages(view, files, view.posAtCoords({ left: e.clientX, top: e.clientY })?.pos)
+        return true
+      },
+    },
     onUpdate: ({ editor }) => cb.current.onChange(normalizeHtml(editor.getHTML())),
   })
 

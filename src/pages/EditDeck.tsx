@@ -278,7 +278,7 @@ export function EditDeck() {
         <Plus size={20} /> Add card
       </button>
       <p className="small muted" style={{ textAlign: 'center' }}>
-        Tab moves to the next field. Select text and press Cmd+Shift+C to make a blank.
+        Tab moves to the next field. Cmd+Shift+C makes a blank, Alt+S swaps sides, Alt+T switches card type. Paste or drop images straight in.
       </p>
 
       {picked && (

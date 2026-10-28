@@ -419,6 +419,10 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
   pointer-events: none;
 }
 .toolbar {
+  /* Stays in view while scrolling a long card. */
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 3;
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
@@ -427,6 +431,7 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
   border-radius: var(--radius-sm);
   background: var(--surface-2);
 }
+.sheet .toolbar { top: -18px; box-shadow: 0 -8px 0 var(--surface); } /* flush with the sheet edge (its 18px padding) */
 .toolbar button {
   width: 32px;
   height: 32px;
@@ -733,3 +738,8 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
 .sheet-card { padding: 10px; margin: 0 -10px 8px; border-radius: var(--radius); border: 2px solid transparent; }
 .sheet-card.active { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
 .sheet-card + .sheet-card { margin-top: 4px; }
+
+/* "Saved" note next to the card type switch; fades out a moment after each save. */
+.saved-tick { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-3); opacity: 0; }
+.saved-tick.on { animation: saved 2s ease-out; }
+@keyframes saved { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }

@@ -24,7 +24,7 @@ const GROUPS: [string, [string, string][]][] = [
       ['Esc', 'Close'],
     ],
   ],
-  ['Editor', [['Tab', 'Next field (adds a card at the end)'], ['Shift Tab', 'Previous field'], ['Cmd Shift C', 'Make a blank'], ['Esc', 'Done (outside a field)']]],
+  ['Editor', [['Tab', 'Next field (adds a card at the end)'], ['Shift Tab', 'Previous field'], ['Cmd Shift C', 'Make a blank'], ['Alt S', 'Swap term and definition'], ['Alt T', 'Basic / Fill in the blank'], ['Esc', 'Done (outside a field)']]],
 ]
 
 /** Global "?" sheet listing every shortcut. Mounted once in main.tsx. */
