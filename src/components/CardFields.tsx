@@ -1,3 +1,4 @@
+import type { Editor } from '@tiptap/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowLeftRight, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
@@ -5,7 +6,7 @@ import { hasCloze } from '../lib/cloze'
 import { db, deckCards, deleteCard, insertCardAt, isBlankCard, updateCard } from '../lib/db'
 import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card, CardType } from '../lib/types'
-import { RichEditor } from './RichEditor'
+import { EditorToolbar, RichEditor } from './RichEditor'
 import { Seg, Sheet } from './ui'
 
 /** Debounced card save; flushes on unmount so nothing typed is lost. */
@@ -44,6 +45,8 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
   const latest = useRef({ front: card.front, back: card.back })
   const [sides, setSides] = useState(latest.current)
   const [ver, setVer] = useState(0)
+  // One toolbar for both sides, so it doesn't jump between Term and Definition.
+  const [editors, setEditors] = useState<{ front?: Editor | null; back?: Editor | null }>({})
   useEffect(() => {
     // An outside change (another device, the editor's header buttons), not our own save echoing back.
     if (card.front !== latest.current.front || card.back !== latest.current.back) {
@@ -89,6 +92,7 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
           </button>
         )}
       </div>
+      <EditorToolbar editor={editors[field]} />
       <div className="sides">
         <div onFocusCapture={() => setField('front')}>
           <div className="side-label">{type === 'cloze' ? 'Text with {{blanks}}' : 'Term'}</div>
@@ -99,7 +103,7 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
               placeholder={type === 'cloze' ? '{{Donald Trump}} was the 45th president' : 'Term'}
               autofocus={ver ? field === 'front' : focus === 'front'}
               focused={field === 'front'}
-              toolbar={field === 'front'}
+              onEditor={(e) => setEditors((x) => ({ ...x, front: e }))}
               onChange={setFrontAndType}
               onTab={() => setField('back')}
               onShiftTab={onShiftTabOut}
@@ -115,7 +119,7 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
               placeholder={type === 'cloze' ? 'Shown after flipping' : 'Definition'}
               autofocus={ver ? field === 'back' : focus === 'back'}
               focused={field === 'back'}
-              toolbar={field === 'back'}
+              onEditor={(e) => setEditors((x) => ({ ...x, back: e }))}
               onChange={(html) => {
                 latest.current = { ...latest.current, back: html }
                 save({ back: html })

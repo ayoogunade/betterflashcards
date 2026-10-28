@@ -24,7 +24,7 @@ import {
   Underline as UnderlineIcon,
   Undo2,
 } from 'lucide-react'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useReducer, useRef, type ReactNode } from 'react'
 
 const TB = 17
 
@@ -69,16 +69,16 @@ interface Props {
   /** Tab outside a list moves to the next field; return value unused. */
   onTab?: () => void
   onShiftTab?: () => void
-  toolbar?: boolean
+  /** Hands the editor up so one shared toolbar (EditorToolbar) can drive whichever side is active. */
+  onEditor?: (editor: Editor | null) => void
   /** When this turns true the editor takes focus (used for Tab between sides). */
   focused?: boolean
 }
 
-export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onShiftTab, toolbar = true, focused }: Props) {
+export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onShiftTab, onEditor, focused }: Props) {
   // Keep latest callbacks in refs so the editor (created once) always calls the current ones.
   const cb = useRef({ onChange, onTab, onShiftTab, placeholder })
   cb.current = { onChange, onTab, onShiftTab, placeholder }
-  const fileRef = useRef<HTMLInputElement>(null)
 
   const editor = useEditor({
     extensions: [
@@ -127,57 +127,77 @@ export function RichEditor({ value, placeholder, autofocus, onChange, onTab, onS
     if (editor && focused && !editor.isFocused) editor.commands.focus('end')
   }, [editor, focused])
 
+  useEffect(() => {
+    onEditor?.(editor)
+    return () => onEditor?.(null)
+  }, [editor]) // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!editor) return null
 
-  const btn = (label: string, icon: ReactNode, run: () => void, active = false) => (
+  return (
+    <div>
+      <EditorContent editor={editor} className="rich" />
+    </div>
+  )
+}
+
+/** Formatting buttons for one editor. Stays in one place above both sides; buttons wait while no side is ready. */
+export function EditorToolbar({ editor }: { editor: Editor | null | undefined }) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  // Re-render on every change so the active marks (bold, lists...) stay current.
+  const [, rerender] = useReducer((n: number) => n + 1, 0)
+  useEffect(() => {
+    if (!editor) return
+    editor.on('transaction', rerender)
+    return () => void editor.off('transaction', rerender)
+  }, [editor])
+
+  const btn = (label: string, icon: ReactNode, run: (e: Editor) => void, active?: (e: Editor) => boolean) => (
     <button
       type="button"
       aria-label={label}
       title={label}
-      className={active ? 'active' : ''}
+      disabled={!editor}
+      className={editor && active?.(editor) ? 'active' : ''}
       onMouseDown={(e) => e.preventDefault()}
-      onClick={run}
+      onClick={() => editor && run(editor)}
     >
       {icon}
     </button>
   )
-  const ch = () => editor.chain().focus()
+  const ch = (e: Editor) => e.chain().focus()
+  const is = (name: string) => (e: Editor) => e.isActive(name)
 
   return (
-    <div>
-      {toolbar && (
-        <div className="toolbar">
-          {btn('Bold', <Bold size={TB} />, () => ch().toggleBold().run(), editor.isActive('bold'))}
-          {btn('Italic', <Italic size={TB} />, () => ch().toggleItalic().run(), editor.isActive('italic'))}
-          {btn('Underline', <UnderlineIcon size={TB} />, () => ch().toggleUnderline().run(), editor.isActive('underline'))}
-          {btn('Strikethrough', <Strikethrough size={TB} />, () => ch().toggleStrike().run(), editor.isActive('strike'))}
-          {btn('Highlight', <Highlighter size={TB} />, () => ch().toggleHighlight().run(), editor.isActive('highlight'))}
-          <span className="sep" />
-          {btn('Inline code', <Code size={TB} />, () => ch().toggleCode().run(), editor.isActive('code'))}
-          {btn('Code block', <SquareCode size={TB} />, () => ch().toggleCodeBlock().run(), editor.isActive('codeBlock'))}
-          {btn('Subscript', <SubIcon size={TB} />, () => ch().toggleSubscript().run(), editor.isActive('subscript'))}
-          {btn('Superscript', <SupIcon size={TB} />, () => ch().toggleSuperscript().run(), editor.isActive('superscript'))}
-          {btn('Bullet list', <List size={TB} />, () => ch().toggleBulletList().run(), editor.isActive('bulletList'))}
-          {btn('Numbered list', <ListOrdered size={TB} />, () => ch().toggleOrderedList().run(), editor.isActive('orderedList'))}
-          <span className="sep" />
-          {btn('Make blank (Cmd+Shift+C)', <Braces size={TB} />, () => makeBlank(editor))}
-          {btn('Insert image', <ImagePlus size={TB} />, () => fileRef.current?.click())}
-          {btn('Undo', <Undo2 size={TB} />, () => ch().undo().run())}
-          {btn('Redo', <Redo2 size={TB} />, () => ch().redo().run())}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            hidden
-            onChange={async (e) => {
-              const f = e.target.files?.[0]
-              e.target.value = ''
-              if (f) ch().setImage({ src: await fileToDataUrl(f) }).run()
-            }}
-          />
-        </div>
-      )}
-      <EditorContent editor={editor} className="rich" />
+    <div className="toolbar">
+      {btn('Bold', <Bold size={TB} />, (e) => ch(e).toggleBold().run(), is('bold'))}
+      {btn('Italic', <Italic size={TB} />, (e) => ch(e).toggleItalic().run(), is('italic'))}
+      {btn('Underline', <UnderlineIcon size={TB} />, (e) => ch(e).toggleUnderline().run(), is('underline'))}
+      {btn('Strikethrough', <Strikethrough size={TB} />, (e) => ch(e).toggleStrike().run(), is('strike'))}
+      {btn('Highlight', <Highlighter size={TB} />, (e) => ch(e).toggleHighlight().run(), is('highlight'))}
+      <span className="sep" />
+      {btn('Inline code', <Code size={TB} />, (e) => ch(e).toggleCode().run(), is('code'))}
+      {btn('Code block', <SquareCode size={TB} />, (e) => ch(e).toggleCodeBlock().run(), is('codeBlock'))}
+      {btn('Subscript', <SubIcon size={TB} />, (e) => ch(e).toggleSubscript().run(), is('subscript'))}
+      {btn('Superscript', <SupIcon size={TB} />, (e) => ch(e).toggleSuperscript().run(), is('superscript'))}
+      {btn('Bullet list', <List size={TB} />, (e) => ch(e).toggleBulletList().run(), is('bulletList'))}
+      {btn('Numbered list', <ListOrdered size={TB} />, (e) => ch(e).toggleOrderedList().run(), is('orderedList'))}
+      <span className="sep" />
+      {btn('Make blank (Cmd+Shift+C)', <Braces size={TB} />, makeBlank)}
+      {btn('Insert image', <ImagePlus size={TB} />, () => fileRef.current?.click())}
+      {btn('Undo', <Undo2 size={TB} />, (e) => ch(e).undo().run())}
+      {btn('Redo', <Redo2 size={TB} />, (e) => ch(e).redo().run())}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        hidden
+        onChange={async (ev) => {
+          const f = ev.target.files?.[0]
+          ev.target.value = ''
+          if (f && editor) ch(editor).setImage({ src: await fileToDataUrl(f) }).run()
+        }}
+      />
     </div>
   )
 }
