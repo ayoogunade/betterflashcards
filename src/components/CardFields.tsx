@@ -3,7 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowLeftRight, Check, Plus, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { hasCloze } from '../lib/cloze'
-import { db, deckCards, deleteCard, insertCardAt, isBlankCard, updateCard } from '../lib/db'
+import { alive, db, deckCards, deleteCard, insertCardAt, isBlankCard, moveCards, updateCard } from '../lib/db'
+import { useDecks } from '../lib/hooks'
+import { getPrefs, setPrefs } from '../lib/prefs'
 import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card, CardType } from '../lib/types'
 import { EditorToolbar, RichEditor } from './RichEditor'
@@ -183,23 +185,41 @@ export function CardPreview({ card, onOpen }: { card: Card; onOpen: (field: 'fro
   )
 }
 
+export interface EditCardSheetProps {
+  card: Card
+  onClose: () => void
+  /** `card` is a fresh blank (quick add): it's removed on close if still empty. */
+  fresh?: boolean
+  /** Show a deck picker (library quick add); moving remembers the deck for next time. */
+  pickDeck?: boolean
+  /** Ids of the cards added in this sheet that weren't left empty, on close. */
+  onAdded?: (ids: string[]) => void
+}
+
 /**
  * The "Edit card" sheet (deck page, quick add, search, study screens). "Add card" adds more cards right
  * after this one in the same sheet; the open card is editable and the others show as previews to tap.
  * New cards left empty are removed when the sheet closes.
  */
-export function EditCardSheet({ card, onClose }: { card: Card; onClose: () => void }) {
+export function EditCardSheet({ card, onClose, fresh, pickDeck, onAdded }: EditCardSheetProps) {
   const [ids, setIds] = useState([card.id])
   const [active, setActive] = useState<{ id: string; field: 'front' | 'back' }>({ id: card.id, field: 'front' })
-  const created = useRef<string[]>([])
+  const created = useRef<string[]>(fresh ? [card.id] : [])
   const live = useLiveQuery(() => db.cards.bulkGet(ids), [ids])
   const cards = ids.map((id, i) => live?.[i] ?? (id === card.id ? card : undefined)).filter((c): c is Card => !!c && !c.deleted_at)
+  const deckId = cards[0]?.deck_id ?? card.deck_id
+  const decks = useDecks()
+
+  const moveTo = async (to: string) => {
+    await moveCards(ids, to)
+    setPrefs({ lastDeck: to })
+  }
 
   const add = async () => {
     // Insert after the last card in this sheet, keeping the new cards together in the deck.
-    const order = (await deckCards(card.deck_id)).map((c) => c.id)
+    const order = (await deckCards(deckId)).map((c) => c.id)
     const after = Math.max(...ids.map((id) => order.indexOf(id)))
-    const c = await insertCardAt(card.deck_id, after + 1)
+    const c = await insertCardAt(deckId, after + 1)
     created.current.push(c.id)
     setIds((x) => [...x, c.id])
     setActive({ id: c.id, field: 'front' })
@@ -215,23 +235,42 @@ export function EditCardSheet({ card, onClose }: { card: Card; onClose: () => vo
     // Let the open card's debounced save land before checking for empty new cards.
     setActive({ id: '', field: 'front' })
     await new Promise((r) => setTimeout(r, 100))
+    const kept: string[] = []
     for (const id of created.current) {
       const c = await db.cards.get(id)
       if (c && !c.deleted_at && isBlankCard(c)) await deleteCard(id)
+      else if (c && !c.deleted_at) kept.push(id)
     }
+    if (pickDeck && getPrefs().lastDeck !== deckId) setPrefs({ lastDeck: deckId })
+    if (kept.length) onAdded?.(kept)
     onClose()
   }
 
   return (
-    <Sheet title={cards.length > 1 ? `Edit ${cards.length} cards` : 'Edit card'} onClose={close}>
+    <Sheet title={fresh ? (cards.length > 1 ? `New cards (${cards.length})` : 'New card') : cards.length > 1 ? `Edit ${cards.length} cards` : 'Edit card'} onClose={close}>
+      {pickDeck && decks && (
+        <label className="row" style={{ marginBottom: 10, gap: 8 }}>
+          <span className="side-label" style={{ margin: 0 }}>Deck</span>
+          <select className="input grow" value={deckId} onChange={(e) => void moveTo(e.target.value)} aria-label="Deck for these cards">
+            {decks.decks
+              .filter(alive)
+              .sort((a, b) => a.title.localeCompare(b.title))
+              .map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.title || 'Untitled deck'}
+                </option>
+              ))}
+          </select>
+        </label>
+      )}
       {cards.map((c, i) => (
         <div key={c.id} className={`sheet-card ${active.id === c.id ? 'active' : ''}`}>
           {cards.length > 1 && (
             <div className="row" style={{ marginBottom: 4 }}>
               <span className="side-label grow" style={{ margin: 0 }}>
-                {i === 0 ? 'Card' : `New card ${i}`}
+                {i === 0 ? (fresh ? 'New card' : 'Card') : `New card ${i}`}
               </span>
-              {created.current.includes(c.id) && (
+              {created.current.includes(c.id) && i > 0 && (
                 <button className="icon-btn sm" aria-label={`Remove new card ${i}`} onClick={() => remove(c.id)}>
                   <Trash2 size={16} />
                 </button>

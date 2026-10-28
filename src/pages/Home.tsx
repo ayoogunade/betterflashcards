@@ -1,4 +1,4 @@
-import { Brain, CalendarClock, ChevronDown, ChevronRight, Folder, FolderPlus, Layers, Merge, Plus, Search, Settings as SettingsIcon, X } from 'lucide-react'
+import { Brain, CalendarClock, ChevronDown, ChevronRight, CopyPlus, Folder, FolderPlus, Layers, Merge, Plus, Search, Settings as SettingsIcon, X } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { DeckMenu } from '../components/DeckMenu'
@@ -6,8 +6,9 @@ import { DeckRow } from '../components/DeckRow'
 import { EditCardSheet } from '../components/LazyEditCardSheet'
 import { SyncBadge } from '../components/SyncBadge'
 import { Empty, ICON, Sheet, useToast } from '../components/ui'
-import { alive, copyIntoNewDeck, createDeck, createFolder, deleteFolder, htmlToText } from '../lib/db'
+import { addCard, alive, copyIntoNewDeck, createDeck, createFolder, deleteFolder, htmlToText } from '../lib/db'
 import { useDecks, useFolders, useKeys } from '../lib/hooks'
+import { getPrefs } from '../lib/prefs'
 import { dueCounts } from '../lib/srs'
 import type { Card, Deck } from '../lib/types'
 
@@ -23,7 +24,7 @@ export function Home() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [folderSheet, setFolderSheet] = useState(false)
   const [folderName, setFolderName] = useState('')
-  const [editing, setEditing] = useState<Card | null>(null)
+  const [editing, setEditing] = useState<{ card: Card; fresh?: boolean } | null>(null)
   const searchRef = useRef<HTMLInputElement>(null)
 
   const decks = useMemo(
@@ -49,12 +50,19 @@ export function Home() {
     nav(`/deck/${d.id}/edit`)
   }
 
+  /** Add a card to any deck without opening it: starts in the deck used last, with a picker in the sheet. */
+  const quickAdd = async () => {
+    const deck = decks.find((d) => d.id === getPrefs().lastDeck) ?? decks[0]
+    if (deck) setEditing({ card: await addCard(deck.id, { type: 'basic', front: '', back: '' }), fresh: true })
+  }
+
   useKeys((e) => {
-    if (menuDeck || folderSheet) return
+    if (menuDeck || folderSheet || editing) return
     if (e.key === '/') {
       e.preventDefault()
       searchRef.current?.focus()
     } else if (e.key.toLowerCase() === 'n') void newDeck()
+    else if (e.key.toLowerCase() === 'a') void quickAdd()
   })
 
   if (!data) return null
@@ -114,6 +122,11 @@ export function Home() {
               <FolderPlus size={ICON} />
             </button>
             <SyncBadge />
+            {decks.length > 0 && (
+              <button className="icon-btn" aria-label="Add a card" title="Add a card to any deck (A)" onClick={quickAdd}>
+                <CopyPlus size={ICON} />
+              </button>
+            )}
             <Link className="icon-btn" aria-label="Settings" title="Settings and sync" to="/settings">
               <SettingsIcon size={ICON} />
             </Link>
@@ -143,7 +156,7 @@ export function Home() {
             {results.cardHits.length ? (
               <div className="list">
                 {results.cardHits.map(({ c, front, back }) => (
-                  <button key={c.id} className="list-item" style={{ textAlign: 'left', width: '100%' }} onClick={() => setEditing(c)}>
+                  <button key={c.id} className="list-item" style={{ textAlign: 'left', width: '100%' }} onClick={() => setEditing({ card: c })}>
                     <div className="grow" style={{ minWidth: 0 }}>
                       <div style={{ fontWeight: 600 }} className="truncate">{front || '(empty)'}</div>
                       <div className="small muted truncate">{back}</div>
@@ -271,7 +284,7 @@ export function Home() {
           </form>
         </Sheet>
       )}
-      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditCardSheet card={editing.card} fresh={editing.fresh} pickDeck={editing.fresh} onClose={() => setEditing(null)} />}
       {toast.node}
     </div>
   )

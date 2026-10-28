@@ -154,6 +154,30 @@ export function SettingsFields({ value: s, show, onChange: set }: { value: DeckS
             />
           </Setting>
         ))}
+      {has('examDate') && (
+        <Setting title="Exam date" desc="Every card comes up again by the day before">
+          <div className="row" style={{ gap: 4 }}>
+            <input
+              className="input"
+              type="date"
+              value={s.examDate ?? ''}
+              onChange={(e) => set({ examDate: e.target.value || null })}
+              aria-label="Exam date"
+              style={{ width: 'auto' }}
+            />
+            {s.examDate && (
+              <button className="icon-btn sm" aria-label="Clear exam date" onClick={() => set({ examDate: null })}>
+                <X size={16} />
+              </button>
+            )}
+          </div>
+        </Setting>
+      )}
+      {has('typeAnswer') && (
+        <Setting title="Type the answer" desc="Type it before flipping, then compare">
+          <Switch label="Type the answer" on={!!s.typeAnswer} onChange={(typeAnswer) => set({ typeAnswer })} />
+        </Setting>
+      )}
       {has('starredOnly') && (
         <Setting title="Starred cards only">
           <Switch label="Starred cards only" on={s.starredOnly} onChange={(starredOnly) => set({ starredOnly })} />

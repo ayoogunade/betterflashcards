@@ -4,9 +4,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { EditCardSheet } from '../components/LazyEditCardSheet'
 import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
+import { TypeAnswer } from '../components/TypeAnswer'
 import { Empty } from '../components/ui'
 import { db, hardDelete, logReview, now } from '../lib/db'
-import { backHref, isFlipKey, useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useKeys } from '../lib/hooks'
 import { buildItem, speak } from '../lib/render'
 import { GRADES, GRADE_LABEL, formatInterval, isDue, newLeftToday, nextDue, preview, schedule, type Grade } from '../lib/srs'
 import type { Card, CardState, Rating } from '../lib/types'
@@ -39,14 +40,13 @@ export function SpacedMode() {
     return () => clearInterval(t)
   }, [])
 
-  const eligible = useMemo(() => {
-    if (!data) return []
-    const starred = new Set(data.cards.filter((c) => c.starred).map((c) => c.id))
-    return data.states.filter((s) => !settings?.starredOnly || starred.has(s.card_id))
-  }, [data, settings?.starredOnly])
+  const eligible = useMemo(() => studyStates(data, settings?.starredOnly), [data, settings?.starredOnly])
 
   const orderOf = useMemo(() => new Map(data?.cards.map((c, i) => [c.id, i]) ?? []), [data])
   const cardById = useMemo(() => new Map(data?.cards.map((c) => [c.id, c]) ?? []), [data])
+
+  /** Cards added while editing: shown next, ahead of the daily new-card limit, until first answered. */
+  const added = useRef<string[]>([])
 
   /** Next card, using `override` for a just-rated card the live query hasn't caught up with yet. */
   const pick = (override?: CardState, skip?: string) => {
@@ -54,12 +54,16 @@ export function SpacedMode() {
     const states = override ? eligible.map((s) => (s.key === override.key ? override : s)) : eligible
     const t = Date.now()
     const newLeft = dueOnly ? 0 : newLeftToday(states, settings.newPerDay, t) + extraNew
-    const next = nextDue(
-      states.map((s) => ({ key: s.key, srs: s.srs, order: (orderOf.get(s.card_id) ?? 0) * 100 + s.sub_index })),
-      t,
-      newLeft,
-      skip,
-    )
+    const unseen = new Set(states.filter((s) => !s.srs).map((s) => s.key))
+    added.current = added.current.filter((k) => unseen.has(k))
+    const next =
+      added.current.find((k) => k !== skip) ??
+      nextDue(
+        states.map((s) => ({ key: s.key, srs: s.srs, order: (orderOf.get(s.card_id) ?? 0) * 100 + s.sub_index })),
+        t,
+        newLeft,
+        skip,
+      )
     setCurrent(next ?? null)
     setDone(!next)
     setFlipped(false)
@@ -83,6 +87,11 @@ export function SpacedMode() {
     lastSettings.current = settingsKey
     if (started.current) pick()
   }, [settingsKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const addCards = useAddedCards(data, (keys) => {
+    added.current.push(...keys)
+    if (done) pick()
+  })
 
   const st = current ? eligible.find((s) => s.key === current) : undefined
   const card = st ? cardById.get(st.card_id) : undefined
@@ -209,6 +218,7 @@ export function SpacedMode() {
             badge={!st?.srs ? <span className="badge badge-new">New</span> : undefined}
             swipeLabels={{ left: 'Again', right: 'Good' }}
           />
+          {settings.typeAnswer && <TypeAnswer item={item} flipped={flipped} onSubmit={flip} />}
           {flipped && intervals ? (
             <div className="grade four">
               {GRADES.map((g) => (
@@ -238,13 +248,13 @@ export function SpacedMode() {
       {options && (
         <StudyOptions
           deck={deck}
-          show={['srsMode', 'newPerDay', 'retention', 'fixedMinutes', 'direction', 'starredOnly', 'autoplayTts']}
+          show={['srsMode', 'newPerDay', 'retention', 'fixedMinutes', 'examDate', 'direction', 'typeAnswer', 'starredOnly', 'autoplayTts']}
           reset="schedule"
           onClose={() => setOptions(false)}
           onReset={() => (setCurrent(null), setDone(true))}
         />
       )}
-      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} onAdded={addCards} />}
     </StudyShell>
   )
 }

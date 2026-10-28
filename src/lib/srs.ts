@@ -14,7 +14,7 @@ const DAY = 86_400_000
 /** Learning cards due within this window are shown early instead of ending the session. */
 export const LEARN_AHEAD_MS = 5 * MIN
 
-type SrsSettings = Pick<DeckSettings, 'srsMode' | 'retention' | 'fixedMinutes'>
+type SrsSettings = Pick<DeckSettings, 'srsMode' | 'retention' | 'fixedMinutes' | 'examDate'>
 
 function toFsrs(s: SrsData | null | undefined, now: Date): FsrsCard {
   if (!s) return createEmptyCard(now)
@@ -76,8 +76,24 @@ function scheduler(retention: number) {
 }
 
 export function schedule(prev: SrsData | null | undefined, grade: Grade, now: Date, s: SrsSettings): SrsData {
-  if (s.srsMode === 'fixed') return scheduleFixed(prev, grade, now, s.fixedMinutes)
-  return fromFsrs(scheduler(s.retention).next(toFsrs(prev, now), now, grade).card, prev, now)
+  const next =
+    s.srsMode === 'fixed' ? scheduleFixed(prev, grade, now, s.fixedMinutes) : fromFsrs(scheduler(s.retention).next(toFsrs(prev, now), now, grade).card, prev, now)
+  const due = capForExam(Date.parse(next.due), now.getTime(), s.examDate)
+  if (due === Date.parse(next.due)) return next
+  return { ...next, due: new Date(due).toISOString(), scheduled_days: Math.floor((due - now.getTime()) / DAY) }
+}
+
+/** Start of the day before the exam (local time), or null without a usable date. */
+export function examCutoff(examDate: string | null | undefined): number | null {
+  if (!examDate) return null
+  const t = Date.parse(`${examDate}T00:00`)
+  return Number.isNaN(t) ? null : t - DAY
+}
+
+/** With an exam date, nothing is due after the day before it, so every card comes up again in time. */
+export function capForExam(due: number, now: number, examDate: string | null | undefined): number {
+  const cut = examCutoff(examDate)
+  return cut !== null && now < cut && due > cut ? cut : due
 }
 
 /** Time until due for each button, shown above the buttons before choosing. */

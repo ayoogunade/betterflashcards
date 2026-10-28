@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { dueCounts, formatInterval, newLeftToday, nextDue, preview, schedule, type QueueItem } from './srs'
+import { capForExam, dueCounts, formatInterval, newLeftToday, nextDue, preview, schedule, type QueueItem } from './srs'
 import { DEFAULT_DECK_SETTINGS } from './types'
 
 const S = DEFAULT_DECK_SETTINGS
@@ -85,5 +85,25 @@ describe('formatInterval', () => {
       '4d',
       '3mo',
     ])
+  })
+})
+
+describe('exam date', () => {
+  const now = new Date('2026-11-01T10:00')
+  const base = { srsMode: 'fixed' as const, retention: 0.9, fixedMinutes: [1, 15, 1440, 60 * 24 * 30] }
+
+  it('caps intervals at the day before the exam', () => {
+    const s = schedule(null, 4, now, { ...base, examDate: '2026-11-10' })
+    expect(s.due).toBe(new Date('2026-11-09T00:00').toISOString())
+  })
+
+  it('leaves short intervals and past exams alone', () => {
+    expect(schedule(null, 1, now, { ...base, examDate: '2026-11-10' }).due).toBe(new Date(now.getTime() + 60_000).toISOString())
+    const after = schedule(null, 4, now, { ...base, examDate: '2026-10-01' })
+    expect(after.due).toBe(new Date(now.getTime() + 30 * 86_400_000).toISOString())
+  })
+
+  it('ignores a missing date', () => {
+    expect(capForExam(5, 1, null)).toBe(5)
   })
 })

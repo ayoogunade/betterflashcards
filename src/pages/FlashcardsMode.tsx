@@ -6,7 +6,7 @@ import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { Empty } from '../components/ui'
 import { db, hardDelete, logReview, now } from '../lib/db'
-import { backHref, isFlipKey, useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useKeys } from '../lib/hooks'
 import { shuffled } from '../lib/learn'
 import { buildItem, speak } from '../lib/render'
 import type { Card, CardState } from '../lib/types'
@@ -26,13 +26,17 @@ export function FlashcardsMode() {
   const settings = data?.deck.settings
 
   const eligible = useMemo(() => {
-    if (!data) return []
-    const starred = new Set(data.cards.filter((c) => c.starred).map((c) => c.id))
-    const idx = new Map(data.cards.map((c, i) => [c.id, i]))
-    return data.states
-      .filter((s) => !settings?.starredOnly || starred.has(s.card_id))
-      .sort((a, b) => idx.get(a.card_id)! - idx.get(b.card_id)! || a.sub_index - b.sub_index)
+    const idx = new Map(data?.cards.map((c, i) => [c.id, i]))
+    return studyStates(data, settings?.starredOnly).sort((a, b) => idx.get(a.card_id)! - idx.get(b.card_id)! || a.sub_index - b.sub_index)
   }, [data, settings?.starredOnly])
+  // Cards added while editing come up next (or right away from the end screen).
+  const addCards = useAddedCards(data, (keys) =>
+    setOrder((o) => {
+      if (!o) return o
+      const at = Math.min(o.length, pos >= o.length ? pos : pos + 1)
+      return [...o.slice(0, at), ...keys, ...o.slice(at)]
+    }),
+  )
 
   const stateByKey = useMemo(() => new Map(data?.states.map((s) => [s.key, s]) ?? []), [data])
   const cardById = useMemo(() => new Map(data?.cards.map((c) => [c.id, c]) ?? []), [data])
@@ -241,7 +245,7 @@ export function FlashcardsMode() {
           onReset={() => (pendingRebuild.current = true)}
         />
       )}
-      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} onAdded={addCards} />}
     </StudyShell>
   )
 }

@@ -1,14 +1,14 @@
-import { ArrowLeft, Brain, CalendarClock, Copy, MoreHorizontal, Pencil, Plus, Star, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Brain, CalendarClock, Copy, GraduationCap, MoreHorizontal, Pause, Pencil, Play, Plus, Star, TriangleAlert } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { EditCardSheet } from '../components/LazyEditCardSheet'
 import { DeckMenu } from '../components/DeckMenu'
 import { Heatmap, useActivity } from '../components/Heatmap'
 import { Empty, ICON, MasteryBar, StatGrid, StatusBadge, useToast } from '../components/ui'
-import { addCard, db, deleteCard, isBlankCard, updateCard } from '../lib/db'
-import { useDeck, useKeys } from '../lib/hooks'
+import { addCard, isBlankCard, updateCard } from '../lib/db'
+import { studyStates, useDeck, useKeys } from '../lib/hooks'
 import { LEECH_AT, isLeech, masteryPercent } from '../lib/learn'
-import { dueCounts } from '../lib/srs'
+import { dueCounts, examCutoff } from '../lib/srs'
 import { highlightClozeSource, renderMath } from '../lib/render'
 import type { Card, Status } from '../lib/types'
 
@@ -19,17 +19,12 @@ export function DeckPage() {
   const nav = useNavigate()
   const toast = useToast()
   const [menu, setMenu] = useState(false)
-  const [editing, setEditing] = useState<Card | null>(null)
-  const [filter, setFilter] = useState<Status | 'starred' | 'leech' | null>(null)
+  const [editing, setEditing] = useState<{ card: Card; fresh?: boolean } | null>(null)
+  const [filter, setFilter] = useState<Status | 'starred' | 'leech' | 'suspended' | null>(null)
 
   /** Quick add: a blank card in a sheet, without opening the full editor. Left blank, it's removed on close. */
   const quickAdd = async () => {
-    if (data) setEditing(await addCard(data.deck.id, { type: 'basic', front: '', back: '' }))
-  }
-  const closeEditor = async () => {
-    const card = editing && (await db.cards.get(editing.id))
-    if (card && !card.deleted_at && isBlankCard(card)) await deleteCard(card.id)
-    setEditing(null)
+    if (data) setEditing({ card: await addCard(data.deck.id, { type: 'basic', front: '', back: '' }), fresh: true })
   }
 
   useKeys((e) => {
@@ -56,12 +51,23 @@ export function DeckPage() {
   // Empty cards (an unfinished quick add) are cleaned up when the editor closes; never list them.
   const cards = data.cards.filter((c) => !isBlankCard(c))
   const statuses = states.map((s) => s.status)
-  const due = dueCounts(states, deck.settings.newPerDay, Date.now())
+  const due = dueCounts(studyStates(data, false), deck.settings.newPerDay, Date.now())
+  const exam = examCutoff(deck.settings.examDate)
+  const examDays = exam === null ? null : Math.ceil((exam + 86_400_000 - Date.now()) / 86_400_000)
+  const suspended = cards.filter((c) => c.suspended).length
   const statesByCard = new Map<string, Status[]>()
   for (const s of states) statesByCard.set(s.card_id, [...(statesByCard.get(s.card_id) ?? []), s.status])
   const leeches = new Set(states.filter(isLeech).map((s) => s.card_id))
   const shown = cards.filter((c) =>
-    !filter ? true : filter === 'starred' ? c.starred : filter === 'leech' ? leeches.has(c.id) : (statesByCard.get(c.id) ?? []).includes(filter),
+    !filter
+      ? true
+      : filter === 'starred'
+        ? c.starred
+        : filter === 'leech'
+          ? leeches.has(c.id)
+          : filter === 'suspended'
+            ? c.suspended
+            : (statesByCard.get(c.id) ?? []).includes(filter),
   )
 
   return (
@@ -115,7 +121,7 @@ export function DeckPage() {
               <div style={{ marginTop: 10 }}>
                 <MasteryBar statuses={statuses} />
               </div>
-              <StatGrid statuses={statuses} active={filter === 'starred' || filter === 'leech' ? null : filter} onPick={(s) => setFilter(s)} />
+              <StatGrid statuses={statuses} active={filter === 'starred' || filter === 'leech' || filter === 'suspended' ? null : filter} onPick={(s) => setFilter(s)} />
               <div className="row small muted" style={{ marginTop: 10, gap: 14 }}>
                 <span>
                   <b style={{ color: 'var(--ink)' }}>{due.today}</b> due today
@@ -126,6 +132,11 @@ export function DeckPage() {
                 <span>
                   <b style={{ color: 'var(--ink)' }}>{due.newToday}</b> new today
                 </span>
+                {examDays !== null && examDays >= 0 && (
+                  <span title="Set in Spaced review options">
+                    <GraduationCap size={14} style={{ verticalAlign: -2 }} /> <b style={{ color: 'var(--ink)' }}>{examDays}</b> {examDays === 1 ? 'day' : 'days'} to exam
+                  </span>
+                )}
               </div>
             </div>
 
@@ -151,7 +162,7 @@ export function DeckPage() {
           <div className="section">
             <div className="row" style={{ marginBottom: 8 }}>
               <h3 className="section-title grow" style={{ margin: 0 }}>
-                {filter ? `${shown.length} ${filter === 'starred' ? 'starred ' : filter === 'leech' ? 'leech ' : ''}cards` : `${cards.length} cards`}
+                {filter ? `${shown.length} ${['starred', 'leech', 'suspended'].includes(filter) ? `${filter} ` : ''}cards` : `${cards.length} cards`}
               </h3>
               {leeches.size > 0 && (
                 <button
@@ -161,6 +172,16 @@ export function DeckPage() {
                   title={`Missed ${LEECH_AT}+ times: worth rewriting or splitting`}
                 >
                   <TriangleAlert size={16} /> Leeches {leeches.size}
+                </button>
+              )}
+              {suspended > 0 && (
+                <button
+                  className={`btn btn-ghost small ${filter === 'suspended' ? 'on' : ''}`}
+                  onClick={() => setFilter(filter === 'suspended' ? null : 'suspended')}
+                  aria-pressed={filter === 'suspended'}
+                  title="Left out of study"
+                >
+                  <Pause size={16} /> Suspended {suspended}
                 </button>
               )}
               <button
@@ -185,7 +206,7 @@ export function DeckPage() {
                   <button
                     className="grow"
                     style={{ border: 'none', background: 'none', padding: 0, textAlign: 'left' }}
-                    onClick={() => setEditing(c)}
+                    onClick={() => setEditing({ card: c })}
                     aria-label="Edit card"
                   >
                     {c.type === 'cloze' ? (
@@ -205,8 +226,19 @@ export function DeckPage() {
                         <StatusBadge key={i} status={s} />
                       ))}
                       {leeches.has(c.id) && <span className="badge badge-leech">Leech</span>}
+                      {c.suspended && <span className="badge">Suspended</span>}
                     </div>
                   </button>
+                  {(c.suspended || leeches.has(c.id)) && (
+                    <button
+                      className="icon-btn sm"
+                      aria-label={c.suspended ? 'Unsuspend card' : 'Suspend card'}
+                      title={c.suspended ? 'Unsuspend: study it again' : 'Suspend: leave it out of study'}
+                      onClick={() => updateCard(c.id, { suspended: !c.suspended })}
+                    >
+                      {c.suspended ? <Play size={18} /> : <Pause size={18} />}
+                    </button>
+                  )}
                   <button
                     className={`icon-btn sm ${c.starred ? 'star-on' : ''}`}
                     aria-label={c.starred ? 'Unstar card' : 'Star card'}
@@ -231,7 +263,7 @@ export function DeckPage() {
           }}
         />
       )}
-      {editing && <EditCardSheet card={editing} onClose={closeEditor} />}
+      {editing && <EditCardSheet card={editing.card} fresh={editing.fresh} onClose={() => setEditing(null)} />}
       {toast.node}
     </div>
   )

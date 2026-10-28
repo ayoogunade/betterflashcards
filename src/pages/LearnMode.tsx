@@ -4,9 +4,10 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { EditCardSheet } from '../components/LazyEditCardSheet'
 import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
+import { TypeAnswer } from '../components/TypeAnswer'
 import { Empty, MasteryBar, StatGrid, StatusBadge } from '../components/ui'
 import { db, hardDelete, logReview, now, resetProgress } from '../lib/db'
-import { backHref, isFlipKey, useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useKeys } from '../lib/hooks'
 import {
   answerRound,
   applyRating,
@@ -44,11 +45,11 @@ export function LearnMode() {
   const busy = useRef(false)
 
   const settings = data?.deck.settings
-  const eligible = useMemo(() => {
-    if (!data) return []
-    const starred = new Set(data.cards.filter((c) => c.starred).map((c) => c.id))
-    return data.states.filter((s) => !settings?.starredOnly || starred.has(s.card_id))
-  }, [data, settings?.starredOnly])
+  const eligible = useMemo(() => studyStates(data, settings?.starredOnly), [data, settings?.starredOnly])
+  // Cards added while editing come up right after the current one.
+  const addCards = useAddedCards(data, (keys) =>
+    setRound((r) => (r && !isRoundDone(r) ? { ...r, queue: [...r.queue.slice(0, r.pos + 1), ...keys, ...r.queue.slice(r.pos + 1)] } : r)),
+  )
 
   const stateByKey = useMemo(() => new Map(data?.states.map((s) => [s.key, s]) ?? []), [data])
   const cardById = useMemo(() => new Map(data?.cards.map((c) => [c.id, c]) ?? []), [data])
@@ -215,6 +216,7 @@ export function LearnMode() {
             badge={<StatusBadge status={item.state.status} />}
             swipeLabels={{ left: "Didn't get it", right: 'Got it' }}
           />
+          {settings?.typeAnswer && <TypeAnswer item={item} flipped={flipped} onSubmit={flip} />}
           {flipped ? (
             <div className="grade">
               <button onClick={() => rate(false)}>
@@ -311,12 +313,12 @@ export function LearnMode() {
       {options && (
         <StudyOptions
           deck={deck}
-          show={['direction', 'roundSize', 'correctToMaster', 'starredOnly', 'shuffle', 'reviewMastered', 'autoplayTts']}
+          show={['direction', 'roundSize', 'correctToMaster', 'typeAnswer', 'starredOnly', 'shuffle', 'reviewMastered', 'autoplayTts']}
           onClose={() => setOptions(false)}
           onReset={() => (pendingRestart.current = true)}
         />
       )}
-      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} />}
+      {editing && <EditCardSheet card={editing} onClose={() => setEditing(null)} onAdded={addCards} />}
     </StudyShell>
   )
 }

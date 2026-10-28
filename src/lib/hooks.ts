@@ -43,6 +43,38 @@ export function useDeck(deckId: string | undefined): DeckData | null | undefined
   }, [deckId, deckDefaults, groupSettings])
 }
 
+/** The states a study mode works through: suspended cards left out, and only starred ones if asked. */
+export function studyStates(data: DeckData | null | undefined, starredOnly: boolean | undefined): CardState[] {
+  if (!data) return []
+  const ok = new Set(data.cards.filter((c) => !c.suspended && (!starredOnly || c.starred)).map((c) => c.id))
+  return data.states.filter((s) => ok.has(s.card_id))
+}
+
+/**
+ * Cards added from the Edit card sheet mid-study join the session: call the returned function with
+ * their ids, and `onKeys` gets their study keys once the live data has them.
+ */
+export function useAddedCards(data: DeckData | null | undefined, onKeys: (keys: string[]) => void) {
+  const pending = useRef<string[]>([])
+  const latest = useRef({ data, onKeys })
+  latest.current = { data, onKeys }
+  const check = () => {
+    const { data, onKeys } = latest.current
+    if (!data || !pending.current.length) return
+    const ids = new Set(pending.current)
+    const states = data.states.filter((s) => ids.has(s.card_id))
+    if (!states.length) return
+    const found = new Set(states.map((s) => s.card_id))
+    pending.current = pending.current.filter((id) => !found.has(id))
+    onKeys(states.sort((a, b) => a.sub_index - b.sub_index).map((s) => s.key))
+  }
+  useEffect(check, [data]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (ids: string[]) => {
+    pending.current.push(...ids)
+    check()
+  }
+}
+
 /** Where a study screen's close button goes. */
 export const backHref = (key: string | undefined) => (!key || isGroupKey(key) ? '/' : `/deck/${key}`)
 
@@ -51,7 +83,8 @@ export function useDecks() {
     const decks = await db.decks.toArray()
     const states = await db.cardStates.toArray()
     const cards = (await db.cards.toArray()).filter((c) => alive(c) && !isBlankCard(c))
-    const live = new Set(cards.map((c) => c.id))
+    // Suspended cards still count as cards, but never come due.
+    const live = new Set(cards.filter((c) => !c.suspended).map((c) => c.id))
     const byDeck = new Map<string, CardState[]>()
     for (const s of states) {
       if (!live.has(s.card_id)) continue

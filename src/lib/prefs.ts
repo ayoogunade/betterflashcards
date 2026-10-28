@@ -12,6 +12,8 @@ export interface Prefs {
   deckDefaults: DeckSettings
   /** Study options for folder and all-deck sessions, keyed like `folder:<id>` or `all`. */
   groupSettings: Record<string, Partial<DeckSettings>>
+  /** Deck that quick add from the library used last. */
+  lastDeck?: string
 }
 
 const KEY = 'bf-prefs'

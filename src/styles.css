@@ -743,3 +743,22 @@ button.list-item:hover, a.list-item:hover { background: var(--surface-2); }
 .saved-tick { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ink-3); opacity: 0; }
 .saved-tick.on { animation: saved 2s ease-out; }
 @keyframes saved { 0%, 60% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Type-the-answer: the input under the card, then the comparison after flipping. */
+.type-answer { margin-top: 12px; }
+.type-result {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--st-learning);
+  user-select: text;
+  -webkit-user-select: text;
+}
+.type-result.ok { color: var(--st-mastered); }
+.type-result > span { color: var(--ink); }
+.tw-extra { color: var(--danger); text-decoration: line-through; }
+.tw-missing { color: var(--st-mastered); text-decoration: underline; font-weight: 600; }

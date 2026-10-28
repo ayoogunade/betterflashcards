@@ -32,6 +32,10 @@ export interface DeckSettings {
   retention: number
   /** Fixed mode: minutes for Again, Hard, Good, Easy (default 1m, 15m, 1d, 4d). */
   fixedMinutes: number[]
+  /** Spaced: YYYY-MM-DD. Nothing is scheduled past the day before it. */
+  examDate?: string | null
+  /** Learn and Spaced: type the answer before flipping. */
+  typeAnswer?: boolean
 }
 
 export const DEFAULT_DECK_SETTINGS: DeckSettings = {
@@ -47,6 +51,8 @@ export const DEFAULT_DECK_SETTINGS: DeckSettings = {
   newPerDay: 10,
   retention: 0.9,
   fixedMinutes: [1, 15, 1440, 5760],
+  examDate: null,
+  typeAnswer: false,
 }
 
 export interface Deck extends SyncFields {
@@ -74,6 +80,8 @@ export interface Card extends SyncFields {
   back: string
   hint?: string | null
   starred: boolean
+  /** Left out of every study mode until unsuspended. */
+  suspended?: boolean
   created_at: ISODate
 }
 

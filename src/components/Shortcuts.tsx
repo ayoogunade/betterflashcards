@@ -7,7 +7,7 @@ const EVENT = 'bf-shortcuts'
 export const openShortcuts = () => window.dispatchEvent(new Event(EVENT))
 
 const GROUPS: [string, [string, string][]][] = [
-  ['Library', [['/', 'Search'], ['N', 'New deck'], ['?', 'This list']]],
+  ['Library', [['/', 'Search'], ['N', 'New deck'], ['A', 'Add a card to any deck'], ['?', 'This list']]],
   ['Deck', [['L', 'Learn'], ['F', 'Flashcards'], ['S', 'Spaced review'], ['E', 'Edit deck'], ['A', 'Add a card'], ['Esc', 'Back to library']]],
   [
     'Studying',
