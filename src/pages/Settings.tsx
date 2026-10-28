@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { SettingsFields } from '../components/StudyShell'
 import { ICON, PasswordInput, Seg, Setting, useToast } from '../components/ui'
-import { downloadBackup, importBackup } from '../lib/backup'
+import { downloadBackup, importFile } from '../lib/backup'
 import { setPrefs, usePrefs, type Theme } from '../lib/prefs'
 import { openShortcuts } from '../components/Shortcuts'
 import { formatInterval } from '../lib/srs'
@@ -178,14 +178,14 @@ export function Settings() {
         <h3 className="section-title">Backup</h3>
         <div className="panel">
           <p className="small muted" style={{ marginTop: 0 }}>
-            A JSON file with every deck, card and review. Importing merges it in: anything newer on this device is kept.
+            A JSON file with every deck, card and review. Importing merges it in: anything newer on this device is kept. Import also takes a deck someone shared with you (Share deck in a deck's menu).
           </p>
           <div className="row wrap" style={{ gap: 10 }}>
             <button className="btn" onClick={() => void downloadBackup()}>
               <Download size={16} /> Export everything
             </button>
             <button className="btn" onClick={() => fileInput.current?.click()}>
-              <Upload size={16} /> Import backup
+              <Upload size={16} /> Import file
             </button>
           </div>
           <input
@@ -198,8 +198,7 @@ export function Settings() {
               e.target.value = ''
               if (!file) return
               try {
-                const n = await importBackup(await file.text())
-                toast.show({ msg: `Imported ${n} rows` })
+                toast.show({ msg: await importFile(await file.text()) })
                 void syncNow()
               } catch (err) {
                 toast.show({ msg: err instanceof Error ? err.message : String(err) })

@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { createDeck, db, destroyDeck, updateDeck } from './db'
+import { addCard, createDeck, db, deckCards, destroyDeck, updateDeck } from './db'
 import { apply, shouldApply } from './sync'
 
 beforeEach(async () => {
@@ -52,5 +52,16 @@ describe('JSON backup', () => {
     expect(await importBackup(file)).toBeGreaterThan(0)
     expect((await db.decks.get(d.id))!.title).toBe('Backed up')
     await expect(importBackup('{"app":"other"}')).rejects.toThrow()
+  })
+
+  it('a shared deck imports as a fresh copy without study data', async () => {
+    const { exportDeck, importFile } = await import('./backup')
+    const d = await createDeck('To share')
+    await addCard(d.id, { type: 'basic', front: '<p>a</p>', back: '<p>b</p>', starred: true })
+    const file = JSON.stringify(await exportDeck((await db.decks.get(d.id))!))
+    expect(await importFile(file)).toContain('1 card)')
+    const copy = (await db.decks.toArray()).find((x) => x.title === 'To share' && x.id !== d.id)!
+    const cards = await deckCards(copy.id)
+    expect(cards.map((c) => [c.front, c.back, c.starred])).toEqual([['<p>a</p>', '<p>b</p>', false]])
   })
 })

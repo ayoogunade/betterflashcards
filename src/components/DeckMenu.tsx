@@ -1,7 +1,7 @@
-import { Copy, FileDown, Folder, FolderPlus, Pin, PinOff, RotateCcw, Tag, Trash2 } from 'lucide-react'
+import { Copy, FileDown, Share2, Folder, FolderPlus, Pin, PinOff, RotateCcw, Tag, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { downloadFile } from '../lib/backup'
+import { downloadDeck, downloadFile } from '../lib/backup'
 import { copyIntoNewDeck, createFolder, deckCards, resetProgress, trashDeck, updateDeck } from '../lib/db'
 import { exportTsv } from '../lib/importParser'
 import { useFolders } from '../lib/hooks'
@@ -101,6 +101,14 @@ export function DeckMenu({ deck, onClose, onDone }: { deck: Deck; onClose: () =>
           }}
         >
           <FileDown size={ICON} /> Export for Anki / Quizlet
+        </button>
+        <button
+          onClick={async () => {
+            await downloadDeck(deck)
+            done('Shared file saved: they open Settings, Import file')
+          }}
+        >
+          <Share2 size={ICON} /> Share deck
         </button>
         <button
           onClick={async () => {
