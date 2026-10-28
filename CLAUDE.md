@@ -9,7 +9,7 @@ Personal offline-first flashcard PWA. Vite + React + TS, Dexie (IndexedDB), Tipt
 - Dev server: `npx vite --port 5280 --strictPort --host`. Browser tests use agent-browser session `bfdev`.
 
 ## Rules
-- The repo is public. Keep course names, other project names, source-app names and anything in `PRD.md`, `IDEAS.md` or `private/` (all gitignored) out of tracked files, comments and UI text.
+- The repo is public. Keep course names, other project names, source-app names and anything in gitignored notes out of tracked files, comments and UI text.
 - Commits carry no AI attribution lines.
 - Icons are lucide only, no emojis. Icon-only buttons need an `aria-label`.
 - Reuse existing components before adding new ones (`components/ui.tsx`, `CardFields.tsx`, `StudyShell.tsx`).
