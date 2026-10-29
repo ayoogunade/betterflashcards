@@ -1,7 +1,7 @@
 import type { Editor } from '@tiptap/react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowLeftRight, Check, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { hasCloze } from '../lib/cloze'
 import { alive, db, deckCards, deleteCard, insertCardAt, isBlankCard, moveCards, updateCard } from '../lib/db'
 import { useDecks } from '../lib/hooks'
@@ -37,10 +37,12 @@ interface FieldsProps {
   focus?: 'front' | 'back'
   onTabOut?: () => void
   onShiftTabOut?: () => void
+  /** Extra buttons at the end of the type row (e.g. delete). */
+  actions?: ReactNode
 }
 
 /** Type switch + the two rich-text sides of one card. Used by the deck editor and the in-study edit sheet. */
-export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: FieldsProps) {
+export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut, actions }: FieldsProps) {
   const { save, saved } = useCardSaver(card.id)
   const [type, setType] = useState<CardType>(card.type)
   const [field, setField] = useState<'front' | 'back'>(focus)
@@ -106,6 +108,7 @@ export function CardFields({ card, focus = 'front', onTabOut, onShiftTabOut }: F
             <ArrowLeftRight size={16} /> Swap
           </button>
         )}
+        {actions}
       </div>
       <EditorToolbar editor={editors[field]} />
       <div className="sides">
@@ -225,11 +228,20 @@ export function EditCardSheet({ card, onClose, fresh, pickDeck, onAdded }: EditC
     setActive({ id: c.id, field: 'front' })
   }
 
-  const remove = async (id: string) => {
-    await deleteCard(id)
-    setIds((x) => x.filter((y) => y !== id))
-    if (active.id === id) setActive({ id: card.id, field: 'front' })
+  const remove = async (c: Card) => {
+    if (!isBlankCard(c) && !confirm('Delete this card?')) return
+    await deleteCard(c.id)
+    const rest = cards.filter((x) => x.id !== c.id)
+    if (!rest.length) return close()
+    setIds((x) => x.filter((y) => y !== c.id))
+    if (active.id === c.id) setActive({ id: rest[0].id, field: 'front' })
   }
+
+  const deleteBtn = (c: Card) => (
+    <button className="icon-btn sm" aria-label="Delete card" title="Delete card" onClick={() => void remove(c)}>
+      <Trash2 size={16} />
+    </button>
+  )
 
   const close = async () => {
     // Let the open card's debounced save land before checking for empty new cards.
@@ -270,11 +282,7 @@ export function EditCardSheet({ card, onClose, fresh, pickDeck, onAdded }: EditC
               <span className="side-label grow" style={{ margin: 0 }}>
                 {i === 0 ? (fresh ? 'New card' : 'Card') : `New card ${i}`}
               </span>
-              {created.current.includes(c.id) && i > 0 && (
-                <button className="icon-btn sm" aria-label={`Remove new card ${i}`} onClick={() => remove(c.id)}>
-                  <Trash2 size={16} />
-                </button>
-              )}
+              {deleteBtn(c)}
             </div>
           )}
           {active.id === c.id ? (
@@ -282,6 +290,7 @@ export function EditCardSheet({ card, onClose, fresh, pickDeck, onAdded }: EditC
               key={c.id}
               card={c}
               focus={active.field}
+              actions={cards.length === 1 && deleteBtn(c)}
               onTabOut={() => {
                 const next = cards[i + 1]
                 if (next) setActive({ id: next.id, field: 'front' })
