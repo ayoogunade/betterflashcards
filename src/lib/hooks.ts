@@ -75,6 +75,20 @@ export function useAddedCards(data: DeckData | null | undefined, onKeys: (keys: 
   }
 }
 
+/** Cards deleted mid-study leave the session: `onGone` gets the study keys that vanished from the live data. */
+export function useGoneCards(data: DeckData | null | undefined, onGone: (keys: Set<string>) => void) {
+  const prev = useRef<Set<string> | null>(null)
+  const latest = useRef(onGone)
+  latest.current = onGone
+  useEffect(() => {
+    if (!data) return
+    const keys = new Set(data.states.map((s) => s.key))
+    const gone = new Set([...(prev.current ?? [])].filter((k) => !keys.has(k)))
+    prev.current = keys
+    if (gone.size) latest.current(gone)
+  }, [data])
+}
+
 /** Where a study screen's close button goes. */
 export const backHref = (key: string | undefined) => (!key || isGroupKey(key) ? '/' : `/deck/${key}`)
 

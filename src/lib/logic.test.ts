@@ -5,6 +5,8 @@ import {
   answerRound,
   applyRating,
   currentKey,
+  dropFromRound,
+  dropKeys,
   isRoundDone,
   masteryPercent,
   pickRound,
@@ -80,6 +82,23 @@ describe('round', () => {
     r = answerRound(r, false)
     expect(r.queue).toEqual(['a', 'b', 'b'])
     expect(isRoundDone(r)).toBe(false)
+  })
+})
+
+describe('dropping deleted cards', () => {
+  it('keeps the position on the same upcoming card', () => {
+    expect(dropKeys(['a', 'b', 'c', 'd'], 2, new Set(['a']))).toEqual({ queue: ['b', 'c', 'd'], pos: 1 })
+    expect(dropKeys(['a', 'b', 'c', 'd'], 2, new Set(['c']))).toEqual({ queue: ['a', 'b', 'd'], pos: 2 })
+    expect(dropKeys(['a', 'b', 'a'], 2, new Set(['a']))).toEqual({ queue: ['b'], pos: 1 })
+  })
+  it('takes the card out of the round score and misses', () => {
+    let r = answerRound(startRound(['a', 'b', 'c']), false)
+    r = answerRound(r, true)
+    r = dropFromRound(r, new Set(['a']))
+    expect(r.queue).toEqual(['b', 'c'])
+    expect(currentKey(r)).toBe('c')
+    expect(r.missed).toEqual([])
+    expect(roundScore(r)).toEqual({ correct: 1, total: 1 })
   })
 })
 

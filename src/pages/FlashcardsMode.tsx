@@ -6,8 +6,8 @@ import { StudyCard } from '../components/StudyCard'
 import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { Empty } from '../components/ui'
 import { db, hardDelete, logReview, now } from '../lib/db'
-import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useKeys } from '../lib/hooks'
-import { shuffled } from '../lib/learn'
+import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useGoneCards, useKeys } from '../lib/hooks'
+import { dropKeys, shuffled } from '../lib/learn'
 import { buildItem, speak } from '../lib/render'
 import type { Card, CardState } from '../lib/types'
 
@@ -37,6 +37,15 @@ export function FlashcardsMode() {
       return [...o.slice(0, at), ...keys, ...o.slice(at)]
     }),
   )
+
+  // Deleted cards drop out; undo steps hold positions in the old order, so they go too.
+  useGoneCards(data, (gone) => {
+    if (!order) return
+    const next = dropKeys(order, pos, gone)
+    setOrder(next.queue)
+    setPos(next.pos)
+    setUndo([])
+  })
 
   const stateByKey = useMemo(() => new Map(data?.states.map((s) => [s.key, s]) ?? []), [data])
   const cardById = useMemo(() => new Map(data?.cards.map((c) => [c.id, c]) ?? []), [data])

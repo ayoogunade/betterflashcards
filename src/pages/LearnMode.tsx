@@ -7,11 +7,12 @@ import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { TypeAnswer } from '../components/TypeAnswer'
 import { Empty, MasteryBar, StatGrid, StatusBadge } from '../components/ui'
 import { db, hardDelete, logReview, now, resetProgress } from '../lib/db'
-import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useGoneCards, useKeys } from '../lib/hooks'
 import {
   answerRound,
   applyRating,
   currentKey,
+  dropFromRound,
   isRoundDone,
   masteryPercent,
   pickRound,
@@ -50,6 +51,16 @@ export function LearnMode() {
   const addCards = useAddedCards(data, (keys) =>
     setRound((r) => (r && !isRoundDone(r) ? { ...r, queue: [...r.queue.slice(0, r.pos + 1), ...keys, ...r.queue.slice(r.pos + 1)] } : r)),
   )
+
+  // Deleted cards leave the round; undo would bring back the old round, so it's cleared.
+  useGoneCards(data, (gone) => {
+    if (!round) return
+    const next = dropFromRound(round, gone)
+    setUndo([])
+    if (!next.queue.length) return begin()
+    setRound(next)
+    if (phase === 'card' && isRoundDone(next)) setPhase('summary')
+  })
 
   const stateByKey = useMemo(() => new Map(data?.states.map((s) => [s.key, s]) ?? []), [data])
   const cardById = useMemo(() => new Map(data?.cards.map((c) => [c.id, c]) ?? []), [data])

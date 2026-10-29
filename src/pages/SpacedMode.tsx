@@ -7,7 +7,7 @@ import { StudyOptions, StudyShell } from '../components/StudyShell'
 import { TypeAnswer } from '../components/TypeAnswer'
 import { Empty } from '../components/ui'
 import { db, hardDelete, logReview, now } from '../lib/db'
-import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useKeys } from '../lib/hooks'
+import { backHref, isFlipKey, studyStates, useAddedCards, useDeck, useGoneCards, useKeys } from '../lib/hooks'
 import { buildItem, speak } from '../lib/render'
 import { GRADES, GRADE_LABEL, formatInterval, isDue, newLeftToday, nextDue, preview, schedule, type Grade } from '../lib/srs'
 import type { Card, CardState, Rating } from '../lib/types'
@@ -91,6 +91,12 @@ export function SpacedMode() {
   const addCards = useAddedCards(data, (keys) => {
     added.current.push(...keys)
     if (done) pick()
+  })
+
+  // A deleted current card is skipped; undo can't restore a deleted card's state.
+  useGoneCards(data, (gone) => {
+    setUndo((u) => u.filter((s) => !gone.has(s.prev.key)))
+    if (current && gone.has(current)) pick()
   })
 
   const st = current ? eligible.find((s) => s.key === current) : undefined

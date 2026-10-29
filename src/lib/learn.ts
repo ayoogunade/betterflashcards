@@ -95,6 +95,17 @@ export function answerRound(round: RoundState, correct: boolean): RoundState {
   return { queue, pos: round.pos + 1, firstTry, missed }
 }
 
+/** Take `gone` keys out of a queue, keeping the position on the same upcoming card. */
+export function dropKeys(queue: string[], pos: number, gone: Set<string>): { queue: string[]; pos: number } {
+  return { queue: queue.filter((k) => !gone.has(k)), pos: pos - queue.slice(0, pos).filter((k) => gone.has(k)).length }
+}
+
+/** A round without the `gone` keys (deleted mid-round): they leave the queue, misses and score. */
+export function dropFromRound(round: RoundState, gone: Set<string>): RoundState {
+  const firstTry = Object.fromEntries(Object.entries(round.firstTry).filter(([k]) => !gone.has(k)))
+  return { ...dropKeys(round.queue, round.pos, gone), firstTry, missed: round.missed.filter((k) => !gone.has(k)) }
+}
+
 export function roundScore(round: RoundState): { correct: number; total: number } {
   const vals = Object.values(round.firstTry)
   return { correct: vals.filter(Boolean).length, total: vals.length }
